@@ -1,0 +1,13 @@
+{
+  "name": "next-gen-drive-server",
+  "version": "1.0.0",
+  "description": "Authoritative Real-Time Auction & Economy Server",
+  "main": "src/auction_server.js",
+  "scripts": {
+    "start": "node src/auction_server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "uuid": "^10.0.0"
+  }
+}
