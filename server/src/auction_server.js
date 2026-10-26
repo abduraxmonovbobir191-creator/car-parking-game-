@@ -25,11 +25,11 @@ const PINK_SLIP_ENABLED = process.env.PINK_SLIP === '1'; // Stays off until race
 const RACE_EXPIRY_MS = 10 * 60 * 1000;
 const VOICE_RANGE_M = 22; // Matches ProximityVoiceChat.maxHearingDistance on the client
 
+// Primary keys per table; column names match sql/schema.sql
 const TABLE_KEYS = {
     players: ['id'],
     cars: ['vin'],
-    car_owners: ['vin', 'seq'],
-    vip_plates: ['plate'],
+    vip_plates: ['plate_code'],
     auctions: ['vin'],
     races: ['race_id']
 };
@@ -106,15 +106,16 @@ function collect() {
             accidents_count: c.accidentsCount ?? 0,
             condition_percent: c.conditionPercent ?? 100,
             last_accident_at: c.lastAccidentAt ?? 0,
-            last_accident_speed_kmh: c.lastAccidentSpeedKmh ?? null,
-            tuning: c.tuning ? JSON.stringify(c.tuning) : null,
-            custom_parts: JSON.stringify(c.customParts ?? [])
+            last_accident_speed_kmh: c.lastAccidentSpeedKmh ?? 0,
+            owners_history: JSON.stringify(c.ownersHistory ?? []),
+            custom_parts: JSON.stringify(c.customParts ?? []),
+            tuning_setup: JSON.stringify(c.tuning ?? {}),
+            last_accident_at: c.lastAccidentAt ?? 0
         });
-        (c.ownersHistory ?? []).forEach((ownerId, seq) => put('car_owners', { vin: c.vin, seq, owner_id: ownerId }));
     }
 
     for (const pl of dealership.vipPlatesMarket.values()) {
-        put('vip_plates', { plate: pl.plate, tier: pl.tier, price_coins: pl.priceCoins, owner_id: pl.ownerId ?? null });
+        put('vip_plates', { plate_code: pl.plate, tier: pl.tier, price_coins: pl.priceCoins, owner_id: pl.ownerId ?? null });
     }
 
     for (const a of activeAuctions.values()) {
@@ -125,7 +126,7 @@ function collect() {
             current_bid: a.currentBid,
             buyout_price: a.buyoutPrice,
             highest_bidder_id: a.highestBidderId ?? null,
-            end_time: a.endTime,
+            end_time: new Date(a.endTime).toISOString(),
             status: a.status
         });
     }
@@ -155,10 +156,7 @@ async function upsertRow(tx, entry) {
     const values = cols.map(c => entry.row[c]);
     const placeholders = cols.map((_, i) => `$${i + 1}`).join(', ');
     const updates = cols.filter(c => !pk.includes(c)).map(c => `${c} = EXCLUDED.${c}`);
-    // car_owners is append-only; every other table is updated in place
-    const onConflict = entry.table === 'car_owners' || updates.length === 0
-        ? 'DO NOTHING'
-        : `DO UPDATE SET ${updates.join(', ')}`;
+    const onConflict = updates.length === 0 ? 'DO NOTHING' : `DO UPDATE SET ${updates.join(', ')}`;
     await tx.query(
         `INSERT INTO ${entry.table} (${cols.join(', ')}) VALUES (${placeholders}) ON CONFLICT (${pk.join(', ')}) ${onConflict}`,
         values
@@ -227,13 +225,6 @@ async function bootstrap() {
         players.set(r.id, { id: r.id, username: r.username, balance: r.balance, escrowLocked: r.escrow_locked, vipCoins: r.vip_coins });
     }
 
-    const { rows: ownerRows } = await db.pool.query('SELECT vin, seq, owner_id FROM car_owners ORDER BY vin, seq');
-    const history = new Map();
-    for (const o of ownerRows) {
-        if (!history.has(o.vin)) history.set(o.vin, []);
-        history.get(o.vin).push(o.owner_id);
-    }
-
     const { rows: carRows } = await db.pool.query('SELECT * FROM cars');
     for (const r of carRows) {
         cars.set(r.vin, {
@@ -243,18 +234,18 @@ async function bootstrap() {
             horsepower: r.horsepower,
             odometerKm: Number(r.odometer_km),
             accidentsCount: r.accidents_count,
-            lastAccidentSpeedKmh: r.last_accident_speed_kmh ?? undefined,
+            lastAccidentSpeedKmh: r.last_accident_speed_kmh,
             conditionPercent: r.condition_percent,
-            lastAccidentAt: r.last_accident_at,
-            tuning: r.tuning ?? null,
+            lastAccidentAt: Number(r.last_accident_at),
+            tuning: Object.keys(r.tuning_setup ?? {}).length ? r.tuning_setup : null,
             customParts: r.custom_parts ?? [],
-            ownersHistory: history.get(r.vin) ?? [r.owner_id]
+            ownersHistory: Array.isArray(r.owners_history) ? r.owners_history : [r.owner_id]
         });
     }
 
-    const { rows: plateRows } = await db.pool.query('SELECT plate, owner_id FROM vip_plates');
+    const { rows: plateRows } = await db.pool.query('SELECT plate_code, owner_id FROM vip_plates');
     for (const r of plateRows) {
-        const item = dealership.vipPlatesMarket.get(r.plate);
+        const item = dealership.vipPlatesMarket.get(r.plate_code);
         if (item) item.ownerId = r.owner_id;
     }
 
@@ -268,7 +259,7 @@ async function bootstrap() {
             currentBid: r.current_bid,
             buyoutPrice: r.buyout_price,
             highestBidderId: r.highest_bidder_id ?? null,
-            endTime: r.end_time,
+            endTime: new Date(r.end_time).getTime(),
             status: r.status
         });
     }
