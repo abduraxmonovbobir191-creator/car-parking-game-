@@ -19,6 +19,7 @@ class LobbyManager {
             rpm: 900,
             hoodOpen: false,
             hasReported: false,
+            speedKmh: null, // measured by the server from the last two reports; null until verifiable
             lastUpdated: Date.now()
         });
         return Array.from(room.values());
@@ -57,6 +58,7 @@ class LobbyManager {
             if (speedKmh > MAX_SPEED_KMH) {
                 return { cheated: true, reason: 'Anti-Cheat: Speedhack yoki Teleport aniqlandi!' };
             }
+            state.speedKmh = speedKmh;
         }
         state.hasReported = true;
 

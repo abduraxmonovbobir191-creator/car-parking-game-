@@ -81,3 +81,7 @@ CREATE TABLE IF NOT EXISTS ledger (
 
 CREATE INDEX IF NOT EXISTS ledger_player_idx ON ledger (player_id, id);
 CREATE INDEX IF NOT EXISTS cars_owner_idx ON cars (owner_id);
+
+-- Police heat (additive): pursuit level and when it was last raised, used to decay it
+ALTER TABLE players ADD COLUMN IF NOT EXISTS heat INT NOT NULL DEFAULT 0 CHECK (heat BETWEEN 0 AND 5);
+ALTER TABLE players ADD COLUMN IF NOT EXISTS heat_at BIGINT NOT NULL DEFAULT 0;

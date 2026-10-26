@@ -4,6 +4,7 @@ const db = require('./db');
 const { LobbyManager } = require('./lobby_sync');
 const { DealershipAndMonetizationManager } = require('./monetization_dealership');
 const { StreetRaceWagerManager } = require('./race_wager_server');
+const police = require('./police_fines');
 
 const PORT = process.env.PORT || 8080;
 const wss = new WebSocket.Server({ port: PORT, maxPayload: 16 * 1024 });
@@ -92,7 +93,9 @@ function collect() {
             username: p.username,
             balance: p.balance,
             escrow_locked: p.escrowLocked,
-            vip_coins: p.vipCoins ?? 0
+            vip_coins: p.vipCoins ?? 0,
+            heat: p.heat ?? 0,
+            heat_at: p.heatAt ?? 0
         });
     }
 
@@ -222,7 +225,15 @@ async function bootstrap() {
 
     const { rows: playerRows } = await db.pool.query('SELECT * FROM players');
     for (const r of playerRows) {
-        players.set(r.id, { id: r.id, username: r.username, balance: r.balance, escrowLocked: r.escrow_locked, vipCoins: r.vip_coins });
+        players.set(r.id, {
+            id: r.id,
+            username: r.username,
+            balance: r.balance,
+            escrowLocked: r.escrow_locked,
+            vipCoins: r.vip_coins,
+            heat: r.heat,
+            heatAt: Number(r.heat_at)
+        });
     }
 
     const { rows: carRows } = await db.pool.query('SELECT * FROM cars');
@@ -426,7 +437,9 @@ wss.on('connection', (ws) => {
                         username: data.username || 'Racer',
                         balance: 150000, // Starting cash
                         escrowLocked: 0,
-                        vipCoins: 1200 // Starting VIP coins
+                        vipCoins: 1200, // Starting VIP coins
+                        heat: 0,
+                        heatAt: 0
                     });
                     createSampleCar(currentPlayerId, "BMW M5 CS (F90)", 635);
                 }
@@ -688,6 +701,53 @@ wss.on('connection', (ws) => {
                     return send(ws, { event: 'ERROR', message: result.message });
                 }
                 send(ws, { event: 'REPAIR_DONE', vin: car.vin, ...result });
+                break;
+            }
+
+            case 'POLICE_SPEED_REPORT': {
+                if (!currentPlayerId) {
+                    return send(ws, { event: 'ERROR', message: 'Avval tizimga kiring (AUTH).' });
+                }
+                const { vin, zoneId, speedKmh } = data;
+                const car = cars.get(vin);
+                if (!car || car.ownerId !== currentPlayerId) {
+                    return send(ws, { event: 'ERROR', message: 'Siz bu mashina egasi emassiz!' });
+                }
+                const position = ws.roomId ? lobby.rooms.get(ws.roomId)?.get(currentPlayerId) : null;
+                if (!position || position.vin !== vin) {
+                    return send(ws, { event: 'ERROR', message: 'Bu mashina xonada emas.' });
+                }
+                const result = police.reportSpeedTrap({
+                    player: players.get(currentPlayerId),
+                    position,
+                    zoneId,
+                    claimedKmh: speedKmh,
+                    now: Date.now()
+                });
+                if (!result.ok) {
+                    return send(ws, { event: 'ERROR', message: result.message });
+                }
+                if (result.fined) {
+                    send(ws, { event: 'POLICE_FINE', vin, amount: result.amount, over: result.over, heat: result.heat });
+                } else {
+                    send(ws, { event: 'POLICE_CLEAR', vin, heat: result.heat });
+                }
+                break;
+            }
+
+            case 'BRIBE_OFFICER': {
+                if (!currentPlayerId) {
+                    return send(ws, { event: 'ERROR', message: 'Avval tizimga kiring (AUTH).' });
+                }
+                const car = cars.get(data.vin);
+                if (!car || car.ownerId !== currentPlayerId) {
+                    return send(ws, { event: 'ERROR', message: 'Siz bu mashina egasi emassiz!' });
+                }
+                const result = police.attemptBribe({ player: players.get(currentPlayerId), now: Date.now() });
+                if (!result.ok) {
+                    return send(ws, { event: 'ERROR', message: result.message });
+                }
+                send(ws, { event: 'BRIBE_RESULT', vin: car.vin, success: result.success, cost: result.cost, heat: result.heat });
                 break;
             }
 
