@@ -1,6 +1,7 @@
 const WebSocket = require('ws');
 const { v4: uuidv4 } = require('uuid');
 const { LobbyManager } = require('./lobby_sync');
+const { DealershipAndMonetizationManager } = require('./monetization_dealership');
 
 const PORT = process.env.PORT || 8080;
 const wss = new WebSocket.Server({ port: PORT, maxPayload: 16 * 1024 });
@@ -10,6 +11,7 @@ const players = new Map();
 const cars = new Map();
 const activeAuctions = new Map();
 const lobby = new LobbyManager();
+const dealership = new DealershipAndMonetizationManager();
 
 const MARKET_TAX_RATE = 0.05; // 5% commission to prevent inflation
 const ANTI_SNIPE_WINDOW_MS = 10000; // Last 10 seconds
@@ -73,7 +75,8 @@ wss.on('connection', (ws) => {
                             id: currentPlayerId,
                             username: data.username || 'Racer',
                             balance: 150000, // Starting cash
-                            escrowLocked: 0
+                            escrowLocked: 0,
+                            vipCoins: 0 // Granted only by a verified payment (not implemented yet)
                         });
                         // Grant starter car
                         createSampleCar(currentPlayerId, "BMW M5 CS (F90)", 635);
@@ -163,6 +166,39 @@ wss.on('connection', (ws) => {
                     if (bidAmount >= auction.buyoutPrice) {
                         finalizeAuction(vin);
                     }
+                    break;
+                }
+
+                case 'PURCHASE_VIP_PLATE': {
+                    if (!currentPlayerId) {
+                        return send(ws, { event: 'ERROR', message: 'Avval tizimga kiring (AUTH).' });
+                    }
+                    const player = players.get(currentPlayerId);
+                    const result = dealership.purchaseVipPlate(player, data.plateCode);
+                    if (!result.success) {
+                        return send(ws, { event: 'ERROR', message: result.message });
+                    }
+                    send(ws, { event: 'VIP_PLATE_PURCHASED', plate: result.plate, vipCoins: player.vipCoins });
+                    break;
+                }
+
+                case 'REPAIR_VEHICLE': {
+                    if (!currentPlayerId) {
+                        return send(ws, { event: 'ERROR', message: 'Avval tizimga kiring (AUTH).' });
+                    }
+                    const car = cars.get(data.vin);
+                    if (!car || car.ownerId !== currentPlayerId) {
+                        return send(ws, { event: 'ERROR', message: 'Siz bu mashina egasi emassiz!' });
+                    }
+                    if (activeAuctions.has(car.vin)) {
+                        return send(ws, { event: 'ERROR', message: 'Auksiondagi mashinani ta\'mirlab bo\'lmaydi.' });
+                    }
+                    const player = players.get(currentPlayerId);
+                    const result = dealership.repairVehicle(player, car);
+                    if (!result.success) {
+                        return send(ws, { event: 'ERROR', message: result.message });
+                    }
+                    send(ws, { event: 'REPAIR_DONE', vin: car.vin, ...result });
                     break;
                 }
 
