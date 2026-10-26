@@ -12,11 +12,9 @@ namespace NextGenDrive.Physics
         public bool isSteerable;
         public bool isPowered;
         public bool hasHandbrake;
-        [Tooltip("Visual camber in degrees, applied on top of the physics pose in SyncWheelVisuals")]
-        public float camberAngle;
+        [HideInInspector] public float camberAngle;
     }
 
-    [RequireComponent(typeof(Rigidbody))]
     public class RealisticCarController : MonoBehaviour
     {
         [Header("Vehicle Identity (VIN)")]
@@ -64,6 +62,12 @@ namespace NextGenDrive.Physics
         private bool handbrakeInput;
         private Vector3 lastPosition;
 
+        // Public getters so Audio/HUD/Network scripts never call Input.GetAxis directly
+        public float CurrentThrottle => throttleInput;
+        public float CurrentSteer => steerInput;
+        public float CurrentBrake => brakeInput;
+        public bool IsHandbrakeEngaged => handbrakeInput;
+
         private void Awake()
         {
             rb = GetComponent<Rigidbody>();
@@ -83,9 +87,6 @@ namespace NextGenDrive.Physics
             brakeInput = Mathf.Clamp01(brake);
             handbrakeInput = handbrake;
         }
-
-        /// <summary>Throttle after clamping, -1..1. Read by sound and HUD code so every car uses its own input.</summary>
-        public float CurrentThrottle => throttleInput;
 
         private void FixedUpdate()
         {
@@ -120,7 +121,7 @@ namespace NextGenDrive.Physics
 
             foreach (var w in wheels)
             {
-                if (w.isPowered)
+                if (w.isPowered && w.collider != null)
                 {
                     avgWheelRPM += w.collider.rpm;
                     poweredCount++;
@@ -170,10 +171,9 @@ namespace NextGenDrive.Physics
 
             foreach (var w in wheels)
             {
-                if (!w.isSteerable) continue;
+                if (!w.isSteerable || w.collider == null) continue;
 
                 float angle = steerInput * dynamicMaxAngle;
-                // Ackermann geometry: inner wheel turns sharper than outer wheel
                 if (steerInput > 0 && w.collider.transform.localPosition.x > 0)
                     angle *= (1f + ackermannFactor);
                 else if (steerInput < 0 && w.collider.transform.localPosition.x < 0)
@@ -194,6 +194,7 @@ namespace NextGenDrive.Physics
 
             foreach (var w in wheels)
             {
+                if (w.collider == null) continue;
                 w.collider.motorTorque = w.isPowered ? torquePerWheel : 0f;
 
                 bool isFront = w.collider.transform.localPosition.z > 0;
@@ -225,11 +226,15 @@ namespace NextGenDrive.Physics
         {
             foreach (var w in wheels)
             {
-                if (w.visualMesh == null) continue;
+                if (w.visualMesh == null || w.collider == null) continue;
+
                 w.collider.GetWorldPose(out Vector3 pos, out Quaternion rot);
-                // WheelCollider has no camber, so the tilt is added here instead of writing the mesh transform
-                rot *= Quaternion.Euler(0f, 0f, w.camberAngle);
-                w.visualMesh.SetPositionAndRotation(pos, rot);
+
+                // Apply Camber (Razval) relative to the car's local side without losing steering/rolling rotation
+                float sideSign = w.collider.transform.localPosition.x >= 0f ? 1f : -1f;
+                Quaternion camberRot = Quaternion.AngleAxis(w.camberAngle * sideSign, transform.forward);
+
+                w.visualMesh.SetPositionAndRotation(pos, camberRot * rot);
             }
         }
     }
