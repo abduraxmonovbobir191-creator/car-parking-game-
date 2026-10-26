@@ -53,6 +53,8 @@ function createSampleCar(ownerId, modelName, horsepower) {
         accidentsCount: 0,
         ownersHistory: [ownerId],
         customParts: ["Stage 2 Turbo", "Forged Carbon Hood"],
+        conditionPercent: 100,
+        lastAccidentAt: 0,
         tuning: null
     };
     cars.set(vin, car);
@@ -76,7 +78,7 @@ wss.on('connection', (ws) => {
                             username: data.username || 'Racer',
                             balance: 150000, // Starting cash
                             escrowLocked: 0,
-                            vipCoins: 0 // Granted only by a verified payment (not implemented yet)
+                            vipCoins: 1200 // Starting VIP coins for every new player
                         });
                         // Grant starter car
                         createSampleCar(currentPlayerId, "BMW M5 CS (F90)", 635);
@@ -169,7 +171,8 @@ wss.on('connection', (ws) => {
                     break;
                 }
 
-                case 'PURCHASE_VIP_PLATE': {
+                case 'BUY_VIP_PLATE':
+                case 'PURCHASE_VIP_PLATE': {  // legacy name kept for existing clients
                     if (!currentPlayerId) {
                         return send(ws, { event: 'ERROR', message: 'Avval tizimga kiring (AUTH).' });
                     }
@@ -182,7 +185,36 @@ wss.on('connection', (ws) => {
                     break;
                 }
 
-                case 'REPAIR_VEHICLE': {
+                case 'REPORT_ACCIDENT': {
+                    if (!currentPlayerId) {
+                        return send(ws, { event: 'ERROR', message: 'Avval tizimga kiring (AUTH).' });
+                    }
+                    const { vin, impactSpeedKmh } = data;
+                    const car = cars.get(vin);
+                    if (!car || car.ownerId !== currentPlayerId) {
+                        return send(ws, { event: 'ERROR', message: 'Siz bu mashina egasi emassiz!' });
+                    }
+                    if (!Number.isFinite(impactSpeedKmh) || impactSpeedKmh < 18 || impactSpeedKmh > 400) {
+                        return send(ws, { event: 'ERROR', message: 'Avariya tezligi noto\'g\'ri.' });
+                    }
+                    // One crash can produce several contact events; accept one report per 2 seconds per car
+                    if (Date.now() - car.lastAccidentAt < 2000) {
+                        return send(ws, { event: 'ERROR', message: 'Bu avariya allaqachon qayd etilgan.' });
+                    }
+                    car.lastAccidentAt = Date.now();
+                    dealership.recordVehicleAccident(car, impactSpeedKmh);
+                    send(ws, {
+                        event: 'ACCIDENT_RECORDED',
+                        vin,
+                        impactSpeedKmh: Math.round(impactSpeedKmh),
+                        accidentsCount: car.accidentsCount,
+                        conditionPercent: car.conditionPercent
+                    });
+                    break;
+                }
+
+                case 'REPAIR_CAR':
+                case 'REPAIR_VEHICLE': {  // legacy name kept for existing clients
                     if (!currentPlayerId) {
                         return send(ws, { event: 'ERROR', message: 'Avval tizimga kiring (AUTH).' });
                     }
