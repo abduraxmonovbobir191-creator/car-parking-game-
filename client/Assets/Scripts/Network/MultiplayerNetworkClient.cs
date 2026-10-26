@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -54,6 +55,18 @@ namespace NextGenDrive.Network
         {
             string payload = $"{{\"action\":\"PLACE_BID\",\"vin\":\"{vin}\",\"bidAmount\":{bidAmount}}}";
             await SendJsonAsync(payload);
+        }
+
+        /// <summary>Speed-trap observation. The server decides the fine; the client only reports what it saw.</summary>
+        public async Task ReportSpeedTrap(string vin, string zoneId, float speedKmh)
+        {
+            string speed = speedKmh.ToString("F1", CultureInfo.InvariantCulture);
+            await SendJsonAsync($"{{\"action\":\"POLICE_SPEED_REPORT\",\"vin\":\"{vin}\",\"zoneId\":\"{zoneId}\",\"speedKmh\":{speed}}}");
+        }
+
+        public async Task RequestBribe(string vin)
+        {
+            await SendJsonAsync($"{{\"action\":\"BRIBE_OFFICER\",\"vin\":\"{vin}\"}}");
         }
 
         private async Task SendJsonAsync(string json)

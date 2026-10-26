@@ -115,8 +115,7 @@ namespace NextGenDrive.Customization
                 // Camber is stored on the wheel and applied by RealisticCarController.SyncWheelVisuals,
                 // so the per-frame visual sync no longer overwrites it
                 bool isFront = w.collider.transform.localPosition.z > 0;
-                float sideSign = w.collider.transform.localPosition.x > 0 ? 1f : -1f;
-                w.camberAngle = (isFront ? stance.frontCamberAngle : stance.rearCamberAngle) * sideSign;
+                w.camberAngle = isFront ? stance.frontCamberAngle : stance.rearCamberAngle; // unsigned, see SyncWheelVisuals
 
                 // Travel stays fixed; ride height moves the spring's rest point, 0.5 = nominal height.
                 // The sign convention is checked in the editor.

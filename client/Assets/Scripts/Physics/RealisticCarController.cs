@@ -12,7 +12,9 @@ namespace NextGenDrive.Physics
         public bool isSteerable;
         public bool isPowered;
         public bool hasHandbrake;
-        [HideInInspector] public float camberAngle;
+        [HideInInspector] public float camberAngle;      // unsigned; SyncWheelVisuals applies the side sign
+        [HideInInspector] public float baseForwardStiffness = 1f;
+        [HideInInspector] public float baseSidewaysStiffness = 1f;
     }
 
     public class RealisticCarController : MonoBehaviour
@@ -55,6 +57,10 @@ namespace NextGenDrive.Physics
         [Tooltip("Fixed suspension travel in meters; ride height is set through the spring's target position")]
         public float suspensionTravelMeters = 0.30f;
 
+        [Header("Surface")]
+        [Tooltip("Set by WeatherAndSurfaceManager: 1 = dry asphalt, lower on wet roads")]
+        [Range(0.1f, 1f)] public float surfaceGripMultiplier = 1f;
+
         private Rigidbody rb;
         private float throttleInput;
         private float steerInput;
@@ -76,7 +82,10 @@ namespace NextGenDrive.Physics
 
             foreach (var w in wheels)
             {
-                if (w.collider != null) w.collider.suspensionDistance = suspensionTravelMeters;
+                if (w.collider == null) continue;
+                w.collider.suspensionDistance = suspensionTravelMeters;
+                w.baseForwardStiffness = w.collider.forwardFriction.stiffness;
+                w.baseSidewaysStiffness = w.collider.sidewaysFriction.stiffness;
             }
         }
 
@@ -204,22 +213,30 @@ namespace NextGenDrive.Physics
                 if (handbrakeInput && w.hasHandbrake)
                 {
                     currentBrake = handbrakeTorque;
-                    AdjustSidewaysGrip(w.collider, driftStiffnessMultiplier);
+                    AdjustGrip(w, driftStiffnessMultiplier);
                 }
                 else
                 {
-                    AdjustSidewaysGrip(w.collider, 1.0f);
+                    AdjustGrip(w, 1.0f);
                 }
 
                 w.collider.brakeTorque = currentBrake;
             }
         }
 
-        private void AdjustSidewaysGrip(WheelCollider wc, float stiffness)
+        // Forward and sideways stiffness both scale with the surface, so wet roads cut grip in every direction
+        private void AdjustGrip(WheelData w, float sidewaysFactor)
         {
-            WheelFrictionCurve sFriction = wc.sidewaysFriction;
-            sFriction.stiffness = Mathf.Lerp(sFriction.stiffness, stiffness, Time.fixedDeltaTime * 10f);
-            wc.sidewaysFriction = sFriction;
+            WheelCollider wc = w.collider;
+
+            WheelFrictionCurve forward = wc.forwardFriction;
+            forward.stiffness = w.baseForwardStiffness * surfaceGripMultiplier;
+            wc.forwardFriction = forward;
+
+            WheelFrictionCurve sideways = wc.sidewaysFriction;
+            float target = w.baseSidewaysStiffness * sidewaysFactor * surfaceGripMultiplier;
+            sideways.stiffness = Mathf.Lerp(sideways.stiffness, target, Time.fixedDeltaTime * 10f);
+            wc.sidewaysFriction = sideways;
         }
 
         private void SyncWheelVisuals()
@@ -230,11 +247,9 @@ namespace NextGenDrive.Physics
 
                 w.collider.GetWorldPose(out Vector3 pos, out Quaternion rot);
 
-                // Apply Camber (Razval) relative to the car's local side without losing steering/rolling rotation
+                // Camber in wheel-local space: the tilt follows steering and rolling, so the axis never wobbles
                 float sideSign = w.collider.transform.localPosition.x >= 0f ? 1f : -1f;
-                Quaternion camberRot = Quaternion.AngleAxis(w.camberAngle * sideSign, transform.forward);
-
-                w.visualMesh.SetPositionAndRotation(pos, camberRot * rot);
+                w.visualMesh.SetPositionAndRotation(pos, rot * Quaternion.Euler(0f, 0f, w.camberAngle * sideSign));
             }
         }
     }
