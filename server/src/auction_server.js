@@ -195,7 +195,7 @@ async function flush(reason, withLedger) {
         return;
     }
 
-    await db.transaction(async (tx) => {
+    await db.withTransaction(async (tx) => {
         for (const entry of deletes.sort((a, b) => WRITE_ORDER.indexOf(b.table) - WRITE_ORDER.indexOf(a.table))) {
             await deleteRow(tx, entry);
         }
@@ -287,7 +287,7 @@ async function bootstrap() {
     await flush('bootstrap', false);
 }
 
-const ready = db.migrate().then(bootstrap);
+const ready = db.initDatabase().then(bootstrap);
 ready.catch(err => {
     console.error('[db] startup failed:', err.message);
     process.exit(1);
