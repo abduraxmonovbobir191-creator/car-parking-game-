@@ -1,22 +1,40 @@
 const WebSocket = require('ws');
 const { v4: uuidv4 } = require('uuid');
+const { LobbyManager } = require('./lobby_sync');
 
 const PORT = process.env.PORT || 8080;
-const wss = new WebSocket.Server({ port: PORT });
+const wss = new WebSocket.Server({ port: PORT, maxPayload: 16 * 1024 });
 
 // Server-Authoritative Memory State (Replaceable with PostgreSQL + Redis)
 const players = new Map();
 const cars = new Map();
 const activeAuctions = new Map();
+const lobby = new LobbyManager();
 
 const MARKET_TAX_RATE = 0.05; // 5% commission to prevent inflation
 const ANTI_SNIPE_WINDOW_MS = 10000; // Last 10 seconds
 const ANTI_SNIPE_EXTEND_MS = 15000; // Extend by 15 seconds
+const ROOM_ID_RE = /^[A-Za-z0-9_-]{1,32}$/;
+
+function send(ws, payload) {
+    if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(payload));
+    }
+}
 
 function broadcast(payload) {
     const message = JSON.stringify(payload);
     wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
+            client.send(message);
+        }
+    });
+}
+
+function broadcastToRoom(roomId, payload) {
+    const message = JSON.stringify(payload);
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN && client.roomId === roomId) {
             client.send(message);
         }
     });
@@ -32,7 +50,8 @@ function createSampleCar(ownerId, modelName, horsepower) {
         odometerKm: 0,
         accidentsCount: 0,
         ownersHistory: [ownerId],
-        customParts: ["Stage 2 Turbo", "Forged Carbon Hood"]
+        customParts: ["Stage 2 Turbo", "Forged Carbon Hood"],
+        tuning: null
     };
     cars.set(vin, car);
     return car;
@@ -40,6 +59,7 @@ function createSampleCar(ownerId, modelName, horsepower) {
 
 wss.on('connection', (ws) => {
     let currentPlayerId = null;
+    ws.roomId = null;
 
     ws.on('message', (rawMessage) => {
         try {
@@ -58,11 +78,12 @@ wss.on('connection', (ws) => {
                         // Grant starter car
                         createSampleCar(currentPlayerId, "BMW M5 CS (F90)", 635);
                     }
-                    ws.send(JSON.stringify({
+                    send(ws, {
                         event: 'AUTH_SUCCESS',
                         player: players.get(currentPlayerId),
+                        cars: Array.from(cars.values()).filter(c => c.ownerId === currentPlayerId),
                         activeAuctions: Array.from(activeAuctions.values())
-                    }));
+                    });
                     break;
                 }
 
@@ -71,10 +92,10 @@ wss.on('connection', (ws) => {
                     const car = cars.get(vin);
 
                     if (!car || car.ownerId !== currentPlayerId) {
-                        return ws.send(JSON.stringify({ event: 'ERROR', message: 'Siz bu mashina egasi emassiz!' }));
+                        return send(ws, { event: 'ERROR', message: 'Siz bu mashina egasi emassiz!' });
                     }
                     if (activeAuctions.has(vin)) {
-                        return ws.send(JSON.stringify({ event: 'ERROR', message: 'Mashina allaqachon auksionda!' }));
+                        return send(ws, { event: 'ERROR', message: 'Mashina allaqachon auksionda!' });
                     }
 
                     const durationMs = Math.min(Math.max(durationSeconds || 60, 30), 3600) * 1000;
@@ -101,16 +122,16 @@ wss.on('connection', (ws) => {
                     const bidder = players.get(currentPlayerId);
 
                     if (!auction || auction.status !== 'ACTIVE') {
-                        return ws.send(JSON.stringify({ event: 'ERROR', message: 'Auksion topilmadi yoki tugagan.' }));
+                        return send(ws, { event: 'ERROR', message: 'Auksion topilmadi yoki tugagan.' });
                     }
                     if (auction.sellerId === currentPlayerId) {
-                        return ws.send(JSON.stringify({ event: 'ERROR', message: 'O\'z mashinangizga stavka qo\'ya olmaysiz.' }));
+                        return send(ws, { event: 'ERROR', message: 'O\'z mashinangizga stavka qo\'ya olmaysiz.' });
                     }
                     if (bidAmount <= auction.currentBid) {
-                        return ws.send(JSON.stringify({ event: 'ERROR', message: 'Stavka joriy narxdan baland bo\'lishi shart!' }));
+                        return send(ws, { event: 'ERROR', message: 'Stavka joriy narxdan baland bo\'lishi shart!' });
                     }
                     if (!bidder || (bidder.balance - bidder.escrowLocked) < bidAmount) {
-                        return ws.send(JSON.stringify({ event: 'ERROR', message: 'Balansingizda yetarli mablag\' yo\'q!' }));
+                        return send(ws, { event: 'ERROR', message: 'Balansingizda yetarli mablag\' yo\'q!' });
                     }
 
                     // Unlock previous highest bidder's money
@@ -144,9 +165,102 @@ wss.on('connection', (ws) => {
                     }
                     break;
                 }
+
+                case 'JOIN_ROOM': {
+                    if (!currentPlayerId) {
+                        return send(ws, { event: 'ERROR', message: 'Avval tizimga kiring (AUTH).' });
+                    }
+                    const { roomId, vin } = data;
+                    if (typeof roomId !== 'string' || !ROOM_ID_RE.test(roomId)) {
+                        return send(ws, { event: 'ERROR', message: 'Noto\'g\'ri xona ID.' });
+                    }
+                    const car = cars.get(vin);
+                    if (!car || car.ownerId !== currentPlayerId) {
+                        return send(ws, { event: 'ERROR', message: 'Siz bu mashina egasi emassiz!' });
+                    }
+
+                    if (ws.roomId && ws.roomId !== roomId) {
+                        lobby.removePlayer(ws.roomId, currentPlayerId);
+                        broadcastToRoom(ws.roomId, { event: 'PLAYER_LEFT', roomId: ws.roomId, playerId: currentPlayerId });
+                    }
+
+                    // The VIN is taken from the server record, never trusted from the client
+                    const players_ = lobby.joinRoom(roomId, currentPlayerId, { vin: car.vin });
+                    ws.roomId = roomId;
+                    send(ws, { event: 'ROOM_STATE', roomId, players: players_ });
+                    broadcastToRoom(roomId, { event: 'PLAYER_JOINED', roomId, playerId: currentPlayerId, vin: car.vin });
+                    break;
+                }
+
+                case 'VERIFY_TUNING': {
+                    if (!currentPlayerId) {
+                        return send(ws, { event: 'ERROR', message: 'Avval tizimga kiring (AUTH).' });
+                    }
+                    const { vin, tuning } = data;
+                    const car = cars.get(vin);
+                    if (!car || car.ownerId !== currentPlayerId) {
+                        return send(ws, { event: 'ERROR', message: 'Siz bu mashina egasi emassiz!' });
+                    }
+                    const fields = ['horsepower', 'camberFront', 'camberRear', 'rideHeight'];
+                    if (!tuning || !fields.every(f => Number.isFinite(tuning[f]))) {
+                        return send(ws, { event: 'ERROR', message: 'Tuning ma\'lumoti noto\'g\'ri.' });
+                    }
+
+                    const result = lobby.validateTuningAntiCheat(tuning);
+                    if (!result.valid) {
+                        return send(ws, { event: 'ERROR', message: result.reason });
+                    }
+                    car.tuning = {
+                        horsepower: tuning.horsepower,
+                        camberFront: tuning.camberFront,
+                        camberRear: tuning.camberRear,
+                        rideHeight: tuning.rideHeight
+                    };
+                    send(ws, { event: 'TUNING_VERIFIED', vin, tuning: car.tuning });
+                    break;
+                }
+
+                case 'SYNC_TRANSFORM': {
+                    if (!currentPlayerId || !ws.roomId) {
+                        return send(ws, { event: 'ERROR', message: 'Avval xonaga qo\'shiling (JOIN_ROOM).' });
+                    }
+                    const { vin, px, py, pz, ry, rpm, hood } = data;
+                    if (![px, py, pz, ry, rpm].every(Number.isFinite)) {
+                        return send(ws, { event: 'ERROR', message: 'Koordinata noto\'g\'ri.' });
+                    }
+                    const current = lobby.rooms.get(ws.roomId)?.get(currentPlayerId);
+                    if (!current || current.vin !== vin) {
+                        return send(ws, { event: 'ERROR', message: 'Bu mashina sizniki emas.' });
+                    }
+
+                    const result = lobby.updatePlayerTransform(ws.roomId, currentPlayerId, { px, py, pz, ry, rpm, hood });
+                    if (!result) {
+                        return send(ws, { event: 'ERROR', message: 'Xonada emassiz.' });
+                    }
+                    if (result.cheated) {
+                        const roomId = ws.roomId;
+                        lobby.removePlayer(roomId, currentPlayerId);
+                        // Notify the cheater too: they are still a socket in the room until roomId is cleared
+                        broadcastToRoom(roomId, { event: 'PLAYER_LEFT', roomId, playerId: currentPlayerId, reason: 'anti-cheat' });
+                        ws.roomId = null;
+                        send(ws, { event: 'ERROR', message: result.reason });
+                        break;
+                    }
+                    broadcastToRoom(ws.roomId, { event: 'TRANSFORM_UPDATED', playerId: currentPlayerId, state: result.state });
+                    break;
+                }
             }
         } catch (err) {
-            ws.send(JSON.stringify({ event: 'ERROR', message: 'Noto\'g\'ri so\'rov formati' }));
+            send(ws, { event: 'ERROR', message: 'Noto\'g\'ri so\'rov formati' });
+        }
+    });
+
+    ws.on('close', () => {
+        if (ws.roomId && currentPlayerId) {
+            const roomId = ws.roomId;
+            lobby.removePlayer(roomId, currentPlayerId);
+            broadcastToRoom(roomId, { event: 'PLAYER_LEFT', roomId, playerId: currentPlayerId });
+            ws.roomId = null;
         }
     });
 });

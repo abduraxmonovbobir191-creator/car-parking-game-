@@ -18,6 +18,7 @@ class LobbyManager {
             ry: 0,
             rpm: 900,
             hoodOpen: false,
+            hasReported: false,
             lastUpdated: Date.now()
         });
         return Array.from(room.values());
@@ -46,15 +47,18 @@ class LobbyManager {
         const now = Date.now();
         const dtSeconds = Math.max((now - state.lastUpdated) / 1000, 0.016);
 
-        // Speedhack / Teleport Anti-Cheat Check
-        const dx = transformData.px - state.px;
-        const dz = transformData.pz - state.pz;
-        const distMeters = Math.sqrt(dx * dx + dz * dz);
-        const speedKmh = (distMeters / dtSeconds) * 3.6;
+        // Speedhack / Teleport Anti-Cheat Check (the first report only sets the spawn point)
+        if (state.hasReported) {
+            const dx = transformData.px - state.px;
+            const dz = transformData.pz - state.pz;
+            const distMeters = Math.sqrt(dx * dx + dz * dz);
+            const speedKmh = (distMeters / dtSeconds) * 3.6;
 
-        if (speedKmh > MAX_SPEED_KMH && state.lastUpdated > 0) {
-            return { cheated: true, reason: 'Anti-Cheat: Speedhack yoki Teleport aniqlandi!' };
+            if (speedKmh > MAX_SPEED_KMH) {
+                return { cheated: true, reason: 'Anti-Cheat: Speedhack yoki Teleport aniqlandi!' };
+            }
         }
+        state.hasReported = true;
 
         state.px = transformData.px;
         state.py = transformData.py;
@@ -69,8 +73,10 @@ class LobbyManager {
 
     removePlayer(roomId, playerId) {
         const room = this.rooms.get(roomId);
-        if (room) {
-            room.delete(playerId);
+        if (!room) return;
+        room.delete(playerId);
+        if (room.size === 0) {
+            this.rooms.delete(roomId);
         }
     }
 }
