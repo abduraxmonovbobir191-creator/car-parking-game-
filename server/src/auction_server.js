@@ -2,6 +2,7 @@ const WebSocket = require('ws');
 const { v4: uuidv4 } = require('uuid');
 const { LobbyManager } = require('./lobby_sync');
 const { DealershipAndMonetizationManager } = require('./monetization_dealership');
+const { StreetRaceWagerManager } = require('./race_wager_server');
 
 const PORT = process.env.PORT || 8080;
 const wss = new WebSocket.Server({ port: PORT, maxPayload: 16 * 1024 });
@@ -12,6 +13,11 @@ const cars = new Map();
 const activeAuctions = new Map();
 const lobby = new LobbyManager();
 const dealership = new DealershipAndMonetizationManager();
+const raceManager = new StreetRaceWagerManager();
+
+// Pink slip moves a car on client-reported times, so it stays off until the server measures them
+const PINK_SLIP_ENABLED = process.env.PINK_SLIP === '1';
+const RACE_EXPIRY_MS = 10 * 60 * 1000;
 
 const MARKET_TAX_RATE = 0.05; // 5% commission to prevent inflation
 const ANTI_SNIPE_WINDOW_MS = 10000; // Last 10 seconds
@@ -42,6 +48,25 @@ function broadcastToRoom(roomId, payload) {
     });
 }
 
+function broadcastToPlayers(playerIds, payload) {
+    const message = JSON.stringify(payload);
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN && playerIds.includes(client.playerId)) {
+            client.send(message);
+        }
+    });
+}
+
+// A car cannot be in two races or in an auction at the same time
+function carIsBusy(vin) {
+    if (activeAuctions.has(vin)) return true;
+    for (const race of raceManager.activeChallenges.values()) {
+        if (race.status === 'FINISHED') continue;
+        if (race.challengerVin === vin || race.opponentVin === vin) return true;
+    }
+    return false;
+}
+
 function createSampleCar(ownerId, modelName, horsepower) {
     const vin = `NGD-${uuidv4().slice(0, 8).toUpperCase()}`;
     const car = {
@@ -64,6 +89,7 @@ function createSampleCar(ownerId, modelName, horsepower) {
 wss.on('connection', (ws) => {
     let currentPlayerId = null;
     ws.roomId = null;
+    ws.playerId = null;
 
     ws.on('message', (rawMessage) => {
         try {
@@ -72,6 +98,7 @@ wss.on('connection', (ws) => {
             switch (data.action) {
                 case 'AUTH': {
                     currentPlayerId = data.playerId || `USER-${uuidv4().slice(0, 5)}`;
+                    ws.playerId = currentPlayerId;
                     if (!players.has(currentPlayerId)) {
                         players.set(currentPlayerId, {
                             id: currentPlayerId,
@@ -234,6 +261,107 @@ wss.on('connection', (ws) => {
                     break;
                 }
 
+                case 'CHALLENGE_RACE': {
+                    if (!currentPlayerId) {
+                        return send(ws, { event: 'ERROR', message: 'Avval tizimga kiring (AUTH).' });
+                    }
+                    const { vin, opponentId, betAmount, isPinkSlip } = data;
+                    const challenger = players.get(currentPlayerId);
+                    const car = cars.get(vin);
+                    if (!car || car.ownerId !== currentPlayerId) {
+                        return send(ws, { event: 'ERROR', message: 'Siz bu mashina egasi emassiz!' });
+                    }
+                    if (typeof opponentId !== 'string' || opponentId === currentPlayerId || !players.has(opponentId)) {
+                        return send(ws, { event: 'ERROR', message: 'Raqib topilmadi yoki o\'zingiz.' });
+                    }
+                    if (isPinkSlip && !PINK_SLIP_ENABLED) {
+                        return send(ws, { event: 'ERROR', message: 'Kalitga-kalit poygasi hozircha o\'chirilgan.' });
+                    }
+                    const bet = isPinkSlip ? 0 : Number(betAmount);
+                    if (!isPinkSlip && (!Number.isSafeInteger(bet) || bet < 0 || bet > 1000000)) {
+                        return send(ws, { event: 'ERROR', message: 'Garov miqdori noto\'g\'ri.' });
+                    }
+                    if (carIsBusy(vin)) {
+                        return send(ws, { event: 'ERROR', message: 'Mashina auksionda yoki boshqa poygada.' });
+                    }
+                    const result = raceManager.createRaceChallenge(challenger, car, opponentId, bet, Boolean(isPinkSlip));
+                    if (!result.success) {
+                        return send(ws, { event: 'ERROR', message: result.message });
+                    }
+                    result.challenge.createdAt = Date.now();
+                    broadcastToPlayers([currentPlayerId, opponentId], { event: 'RACE_CREATED', race: result.challenge });
+                    break;
+                }
+
+                case 'ACCEPT_RACE': {
+                    if (!currentPlayerId) {
+                        return send(ws, { event: 'ERROR', message: 'Avval tizimga kiring (AUTH).' });
+                    }
+                    const { raceId, vin } = data;
+                    const race = raceManager.activeChallenges.get(raceId);
+                    if (!race) {
+                        return send(ws, { event: 'ERROR', message: 'Poyga topilmadi.' });
+                    }
+                    const opponent = players.get(currentPlayerId);
+                    const challenger = players.get(race.challengerId);
+                    const car = cars.get(vin);
+                    if (!car || car.ownerId !== currentPlayerId) {
+                        return send(ws, { event: 'ERROR', message: 'Siz bu mashina egasi emassiz!' });
+                    }
+                    if (carIsBusy(vin)) {
+                        return send(ws, { event: 'ERROR', message: 'Mashina auksionda yoki boshqa poygada.' });
+                    }
+                    // The challenger's bet was not escrowed at creation, so check it now
+                    if (!race.isPinkSlip && (!challenger || challenger.balance < race.betAmount)) {
+                        return send(ws, { event: 'ERROR', message: 'Chaqiruvchining garov uchun mablag\'i yetarli emas.' });
+                    }
+                    const result = raceManager.acceptRaceChallenge(raceId, opponent, car, challenger);
+                    if (!result.success) {
+                        return send(ws, { event: 'ERROR', message: result.message });
+                    }
+                    broadcastToPlayers([race.challengerId, currentPlayerId], {
+                        event: 'RACE_STARTED',
+                        raceId,
+                        startTime: result.race.startTime,
+                        challengerVin: result.race.challengerVin,
+                        opponentVin: result.race.opponentVin
+                    });
+                    break;
+                }
+
+                case 'SUBMIT_DRAG_TIME': {
+                    if (!currentPlayerId) {
+                        return send(ws, { event: 'ERROR', message: 'Avval tizimga kiring (AUTH).' });
+                    }
+                    const { raceId, finishSeconds } = data;
+                    const race = raceManager.activeChallenges.get(raceId);
+                    if (!race || race.status !== 'IN_PROGRESS') {
+                        return send(ws, { event: 'ERROR', message: 'Faol poyga topilmadi.' });
+                    }
+                    if (race.challengerId !== currentPlayerId && race.opponentId !== currentPlayerId) {
+                        return send(ws, { event: 'ERROR', message: 'Siz bu poyga ishtirokchisi emassiz.' });
+                    }
+                    if (Date.now() < race.startTime) {
+                        return send(ws, { event: 'ERROR', message: 'Poyga hali boshlanmagan.' });
+                    }
+                    if (race.results[currentPlayerId] !== undefined) {
+                        return send(ws, { event: 'ERROR', message: 'Vaqt allaqachon yuborilgan.' });
+                    }
+                    if (!Number.isFinite(finishSeconds)) {
+                        return send(ws, { event: 'ERROR', message: 'Vaqt noto\'g\'ri.' });
+                    }
+                    const result = raceManager.submitDragTime(raceId, currentPlayerId, finishSeconds, players, cars);
+                    if (result.error) {
+                        return send(ws, { event: 'ERROR', message: result.error });
+                    }
+                    if (result.completed) {
+                        broadcastToPlayers([race.challengerId, race.opponentId], { event: 'RACE_FINISHED', ...result });
+                        return;
+                    }
+                    send(ws, { event: 'RACE_TIME_RECORDED', raceId, waitingForOpponent: true });
+                    break;
+                }
+
                 case 'JOIN_ROOM': {
                     if (!currentPlayerId) {
                         return send(ws, { event: 'ERROR', message: 'Avval tizimga kiring (AUTH).' });
@@ -367,6 +495,25 @@ function finalizeAuction(vin) {
         car
     });
 }
+
+// Race housekeeping: drop stale challenges and refund cash bets of races that never finished
+setInterval(() => {
+    const now = Date.now();
+    for (const [raceId, race] of raceManager.activeChallenges.entries()) {
+        if (race.status === 'PENDING' && now - race.createdAt > RACE_EXPIRY_MS) {
+            raceManager.activeChallenges.delete(raceId);
+        } else if (race.status === 'IN_PROGRESS' && now - race.startTime > RACE_EXPIRY_MS) {
+            if (!race.isPinkSlip) {
+                const challenger = players.get(race.challengerId);
+                const opponent = players.get(race.opponentId);
+                if (challenger) challenger.balance += race.betAmount;
+                if (opponent) opponent.balance += race.betAmount;
+            }
+            raceManager.activeChallenges.delete(raceId);
+            broadcastToPlayers([race.challengerId, race.opponentId], { event: 'RACE_CANCELLED', raceId, reason: 'timeout' });
+        }
+    }
+}, 5000);
 
 // Tick loop to check expired auctions every second
 setInterval(() => {
