@@ -100,28 +100,32 @@ namespace NextGenDrive.Customization
             );
         }
 
+        private const float NominalRideHeightMeters = 0.16f;
+
         private void ApplyStanceAndSuspension()
         {
             if (carController == null || carController.wheels == null) return;
+
+            float travel = carController.suspensionTravelMeters;
 
             foreach (var w in carController.wheels)
             {
                 if (w.collider == null) continue;
 
-                w.collider.suspensionDistance = stance.rideHeightMeters;
+                // Camber is stored on the wheel and applied by RealisticCarController.SyncWheelVisuals,
+                // so the per-frame visual sync no longer overwrites it
+                bool isFront = w.collider.transform.localPosition.z > 0;
+                float sideSign = w.collider.transform.localPosition.x > 0 ? 1f : -1f;
+                w.camberAngle = (isFront ? stance.frontCamberAngle : stance.rearCamberAngle) * sideSign;
+
+                // Travel stays fixed; ride height moves the spring's rest point, 0.5 = nominal height.
+                // The sign convention is checked in the editor.
+                w.collider.suspensionDistance = travel;
                 JointSpring spring = w.collider.suspensionSpring;
                 spring.spring = stance.springStiffness;
                 spring.damper = stance.springStiffness * 0.14f;
+                spring.targetPosition = Mathf.Clamp01(0.5f + (stance.rideHeightMeters - NominalRideHeightMeters) / travel);
                 w.collider.suspensionSpring = spring;
-
-                // Apply visual camber angle (Razval)
-                if (w.visualMesh != null)
-                {
-                    bool isFront = w.collider.transform.localPosition.z > 0;
-                    float camber = isFront ? stance.frontCamberAngle : stance.rearCamberAngle;
-                    float sideSign = w.collider.transform.localPosition.x > 0 ? 1f : -1f;
-                    w.visualMesh.localRotation = Quaternion.Euler(0f, 0f, camber * sideSign);
-                }
             }
         }
 

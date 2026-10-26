@@ -59,7 +59,7 @@ namespace NextGenDrive.AudioVisual
         {
             backfireCooldown -= Time.deltaTime;
             float currentRPM = carController.currentRPM;
-            float currentThrottle = Input.GetAxis("Vertical");
+            float currentThrottle = carController.CurrentThrottle;
 
             // Trigger Turbo Flutter & Pop-and-Bangs when suddenly releasing throttle at high RPM
             bool suddenLiftOff = (previousThrottle > 0.65f && currentThrottle < 0.15f);

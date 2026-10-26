@@ -12,6 +12,8 @@ namespace NextGenDrive.Physics
         public bool isSteerable;
         public bool isPowered;
         public bool hasHandbrake;
+        [Tooltip("Visual camber in degrees, applied on top of the physics pose in SyncWheelVisuals")]
+        public float camberAngle;
     }
 
     [RequireComponent(typeof(Rigidbody))]
@@ -52,6 +54,8 @@ namespace NextGenDrive.Physics
 
         [Header("Wheels")]
         public WheelData[] wheels;
+        [Tooltip("Fixed suspension travel in meters; ride height is set through the spring's target position")]
+        public float suspensionTravelMeters = 0.30f;
 
         private Rigidbody rb;
         private float throttleInput;
@@ -65,6 +69,11 @@ namespace NextGenDrive.Physics
             rb = GetComponent<Rigidbody>();
             rb.centerOfMass = centerOfMassOffset;
             lastPosition = transform.position;
+
+            foreach (var w in wheels)
+            {
+                if (w.collider != null) w.collider.suspensionDistance = suspensionTravelMeters;
+            }
         }
 
         public void SetInputs(float throttle, float steer, float brake, bool handbrake)
@@ -74,6 +83,9 @@ namespace NextGenDrive.Physics
             brakeInput = Mathf.Clamp01(brake);
             handbrakeInput = handbrake;
         }
+
+        /// <summary>Throttle after clamping, -1..1. Read by sound and HUD code so every car uses its own input.</summary>
+        public float CurrentThrottle => throttleInput;
 
         private void FixedUpdate()
         {
@@ -215,6 +227,8 @@ namespace NextGenDrive.Physics
             {
                 if (w.visualMesh == null) continue;
                 w.collider.GetWorldPose(out Vector3 pos, out Quaternion rot);
+                // WheelCollider has no camber, so the tilt is added here instead of writing the mesh transform
+                rot *= Quaternion.Euler(0f, 0f, w.camberAngle);
                 w.visualMesh.SetPositionAndRotation(pos, rot);
             }
         }
