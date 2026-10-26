@@ -18,6 +18,7 @@ const raceManager = new StreetRaceWagerManager();
 // Pink slip moves a car on client-reported times, so it stays off until the server measures them
 const PINK_SLIP_ENABLED = process.env.PINK_SLIP === '1';
 const RACE_EXPIRY_MS = 10 * 60 * 1000;
+const VOICE_RANGE_M = 22; // Matches ProximityVoiceChat.maxHearingDistance on the client
 
 const MARKET_TAX_RATE = 0.05; // 5% commission to prevent inflation
 const ANTI_SNIPE_WINDOW_MS = 10000; // Last 10 seconds
@@ -90,6 +91,8 @@ wss.on('connection', (ws) => {
     let currentPlayerId = null;
     ws.roomId = null;
     ws.playerId = null;
+    ws.voiceWindowStart = 0;
+    ws.voiceCount = 0;
 
     ws.on('message', (rawMessage) => {
         try {
@@ -329,7 +332,8 @@ wss.on('connection', (ws) => {
                     break;
                 }
 
-                case 'SUBMIT_DRAG_TIME': {
+                case 'SUBMIT_RACE_TIME':
+                case 'SUBMIT_DRAG_TIME': {  // SUBMIT_RACE_TIME is the public name; the old one still works
                     if (!currentPlayerId) {
                         return send(ws, { event: 'ERROR', message: 'Avval tizimga kiring (AUTH).' });
                     }
@@ -359,6 +363,36 @@ wss.on('connection', (ws) => {
                         return;
                     }
                     send(ws, { event: 'RACE_TIME_RECORDED', raceId, waitingForOpponent: true });
+                    break;
+                }
+
+                case 'VOICE_STREAM': {
+                    if (!currentPlayerId || !ws.roomId) {
+                        return send(ws, { event: 'ERROR', message: 'Ovoz uchun xonaga qo\'shiling (JOIN_ROOM).' });
+                    }
+                    const { pcm } = data;
+                    if (typeof pcm !== 'string' || pcm.length === 0 || pcm.length > 8000) {
+                        return send(ws, { event: 'ERROR', message: 'Ovoz paketi noto\'g\'ri.' });
+                    }
+                    // At most 15 packets per second per connection
+                    const now = Date.now();
+                    if (now - ws.voiceWindowStart >= 1000) {
+                        ws.voiceWindowStart = now;
+                        ws.voiceCount = 0;
+                    }
+                    if (++ws.voiceCount > 15) {
+                        return send(ws, { event: 'ERROR', message: 'Ovoz juda tez yuborilmoqda.' });
+                    }
+                    const room = lobby.rooms.get(ws.roomId);
+                    const me = room?.get(currentPlayerId);
+                    if (!me) {
+                        return send(ws, { event: 'ERROR', message: 'Xonada emassiz.' });
+                    }
+                    // Hearing range uses the server's positions, never the sender's claim
+                    const listeners = [...room.values()]
+                        .filter(p => p.playerId !== currentPlayerId && Math.hypot(p.px - me.px, p.pz - me.pz) <= VOICE_RANGE_M)
+                        .map(p => p.playerId);
+                    broadcastToPlayers(listeners, { event: 'VOICE_PACKET', from: currentPlayerId, pcm });
                     break;
                 }
 
