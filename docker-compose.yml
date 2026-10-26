@@ -1,0 +1,52 @@
+# One-command production stack:
+#   cp .env.example .env   (set POSTGRES_PASSWORD)
+#   docker compose up -d --build
+#   docker compose logs -f nextgen-server
+#
+# Only the game server is published, and only on loopback. PostgreSQL has no published port;
+# it is reachable from the server container over the internal network.
+name: nextgen
+
+services:
+  nextgen-postgres:
+    image: postgres:16-alpine
+    container_name: nextgen-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: nextgen_drive
+      POSTGRES_USER: nextgen
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - nextgen-pgdata:/var/lib/postgresql/data
+    networks:
+      - nextgen
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nextgen -d nextgen_drive"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  nextgen-server:
+    build:
+      context: ./server
+    container_name: nextgen-server
+    restart: unless-stopped
+    depends_on:
+      nextgen-postgres:
+        condition: service_healthy
+    environment:
+      # Password is URL-encoded in the value if it contains special characters
+      DATABASE_URL: postgres://nextgen:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@nextgen-postgres:5432/nextgen_drive
+      PORT: "8080"
+      PINK_SLIP: ${PINK_SLIP:-0}
+    ports:
+      - "127.0.0.1:8080:8080"
+    networks:
+      - nextgen
+
+volumes:
+  nextgen-pgdata:
+
+networks:
+  nextgen:
+    name: nextgen
