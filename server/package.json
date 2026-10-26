@@ -7,7 +7,8 @@
     "start": "node src/auction_server.js"
   },
   "dependencies": {
-    "ws": "^8.18.0",
-    "uuid": "^10.0.0"
+    "pg": "^8.23.1",
+    "uuid": "^10.0.0",
+    "ws": "^8.18.0"
   }
 }
