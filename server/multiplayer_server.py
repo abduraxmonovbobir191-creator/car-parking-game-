@@ -2,7 +2,7 @@
 """
 Ultra Car Simulator — Dedicated Multiplayer Backend
 Asyncio + WebSockets + SQLite
-Handles: matchmaking, 64-bit position sync, Avtobozor, ownership/cash transfers, drag race sync
+Handles: matchmaking, 64-bit position sync, Avtobozor, ownership/cash, drag race, voice chat relay
 """
 
 import asyncio
@@ -156,6 +156,18 @@ async def handle_state(client: Client, msg: dict) -> None:
             "t": time.time(),
         }, exclude=client.net_id)
 
+async def handle_voice(client: Client, msg: dict) -> None:
+    """Relay voice packets to other players in the same room (spatial handled client-side)."""
+    if not client.room:
+        return
+    payload = {
+        "type": "voice",
+        "netId": client.net_id,
+        "pcm": msg.get("pcm", ""),
+        "pos": client.pos,
+    }
+    await broadcast_room(client.room, payload, exclude=client.net_id)
+
 async def handle_market_list(client: Client, msg: dict) -> None:
     rows = db_execute(
         "SELECT listing_id, seller_net_id, vehicle_id, price, specs_json FROM market_listings",
@@ -275,6 +287,8 @@ async def handle_message(client: Client, raw: str) -> None:
         await handle_join(client, msg)
     elif t == "state":
         await handle_state(client, msg)
+    elif t == "voice":
+        await handle_voice(client, msg)
     elif t == "market_list":
         await handle_market_list(client, msg)
     elif t == "market_create":
