@@ -10,10 +10,6 @@ using CarParking.Vehicle;
 
 namespace CarParking.Multiplayer
 {
-    /// <summary>
-    /// Unity client connecting NetworkWorldSyncManager, CarMarketAndTradeSystem
-    /// and StreetRaceAndTelemetrySystem to the Python multiplayer backend.
-    /// </summary>
     public class NetworkBackendClient : MonoBehaviour
     {
         public static NetworkBackendClient Instance { get; private set; }
@@ -34,29 +30,17 @@ namespace CarParking.Multiplayer
 
         private void Awake()
         {
-            if (Instance != null && Instance != this)
-            {
-                Destroy(gameObject);
-                return;
-            }
+            if (Instance != null && Instance != this) { Destroy(gameObject); return; }
             Instance = this;
         }
 
-        private async void Start()
-        {
-            await ConnectAsync();
-        }
+        private async void Start() { await ConnectAsync(); }
 
         private void Update()
         {
             if (!_connected) return;
-
             _sendTimer += Time.deltaTime;
-            if (_sendTimer >= 1f / stateSendRate)
-            {
-                _sendTimer = 0f;
-                SendLocalState();
-            }
+            if (_sendTimer >= 1f / stateSendRate) { _sendTimer = 0f; SendLocalState(); }
         }
 
         public async Task ConnectAsync()
@@ -68,40 +52,24 @@ namespace CarParking.Multiplayer
                 await _ws.ConnectAsync(new Uri(serverUrl), _cts.Token);
                 _connected = true;
                 Debug.Log("[NetworkBackend] Connected to " + serverUrl);
-
                 _ = ReceiveLoop();
-
-                await SendJson(new Dictionary<string, object>
-                {
-                    { "type", "join" },
-                    { "name", playerName },
-                    { "room", roomId }
-                });
+                await SendJson(new Dictionary<string, object> { { "type", "join" }, { "name", playerName }, { "room", roomId } });
             }
-            catch (Exception e)
-            {
-                Debug.LogWarning("[NetworkBackend] Connection failed: " + e.Message);
-                _connected = false;
-            }
+            catch (Exception e) { Debug.LogWarning("[NetworkBackend] Connection failed: " + e.Message); _connected = false; }
         }
 
         private async Task ReceiveLoop()
         {
-            var buffer = new byte[8192];
+            var buffer = new byte[16384];
             while (_ws != null && _ws.State == WebSocketState.Open)
             {
                 try
                 {
                     var result = await _ws.ReceiveAsync(new ArraySegment<byte>(buffer), _cts.Token);
                     if (result.MessageType == WebSocketMessageType.Close) break;
-
-                    string json = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                    HandleMessage(json);
+                    HandleMessage(Encoding.UTF8.GetString(buffer, 0, result.Count));
                 }
-                catch
-                {
-                    break;
-                }
+                catch { break; }
             }
             _connected = false;
         }
@@ -113,35 +81,26 @@ namespace CarParking.Multiplayer
                 _netId = ExtractString(json, "netId");
                 Debug.Log("[NetworkBackend] Joined as " + _netId);
             }
-            else if (json.Contains("\"type\":\"state\""))
+            else if (json.Contains("\"type\":\"voice\""))
             {
                 string netId = ExtractString(json, "netId");
-                if (netId == _netId) return;
+                string pcm = ExtractString(json, "pcm");
+                if (netId != null && pcm != null && VoiceChatManager.Instance != null)
+                    VoiceChatManager.Instance.ReceiveVoicePacket(netId, pcm, Vector3.zero);
             }
             else if (json.Contains("\"type\":\"race_start\""))
-            {
                 Debug.Log("[NetworkBackend] Race start received");
-            }
         }
 
         private void SendLocalState()
         {
             var vehicle = FindFirstObjectByType<RealisticVehicleController>();
             if (vehicle == null) return;
-
             var t = vehicle.transform;
             var drivetrain = vehicle.GetComponent<DrivetrainSystem>();
-
-            Vector3d worldPos = FloatingOriginSystem.Instance != null
-                ? FloatingOriginSystem.Instance.LocalToWorld(t.position)
-                : new Vector3d(t.position.x, t.position.y, t.position.z);
-
-            var offset = FloatingOriginSystem.Instance != null
-                ? FloatingOriginSystem.Instance.TotalOriginOffset
-                : Vector3d.zero;
-
-            _ = SendJson(new Dictionary<string, object>
-            {
+            Vector3d worldPos = FloatingOriginSystem.Instance != null ? FloatingOriginSystem.Instance.LocalToWorld(t.position) : new Vector3d(t.position.x, t.position.y, t.position.z);
+            var offset = FloatingOriginSystem.Instance != null ? FloatingOriginSystem.Instance.TotalOriginOffset : Vector3d.zero;
+            _ = SendJson(new Dictionary<string, object> {
                 { "type", "state" },
                 { "pos", new Dictionary<string, double> { { "x", worldPos.x }, { "y", worldPos.y }, { "z", worldPos.z } } },
                 { "rot", new Dictionary<string, float> { { "x", t.rotation.x }, { "y", t.rotation.y }, { "z", t.rotation.z }, { "w", t.rotation.w } } },
@@ -152,65 +111,44 @@ namespace CarParking.Multiplayer
             });
         }
 
+        public async Task SendVoicePacket(string base64Pcm)
+        {
+            await SendJson(new Dictionary<string, object> { { "type", "voice" }, { "pcm", base64Pcm } });
+        }
+
         public async Task CreateMarketListing(string vehicleId, float price, Dictionary<string, object> specs)
         {
-            await SendJson(new Dictionary<string, object>
-            {
-                { "type", "market_create" },
-                { "vehicleId", vehicleId },
-                { "price", price },
-                { "specs", specs }
-            });
+            await SendJson(new Dictionary<string, object> { { "type", "market_create" }, { "vehicleId", vehicleId }, { "price", price }, { "specs", specs } });
         }
 
         public async Task BuyMarketListing(string listingId)
         {
-            await SendJson(new Dictionary<string, object>
-            {
-                { "type", "market_buy" },
-                { "listingId", listingId }
-            });
+            await SendJson(new Dictionary<string, object> { { "type", "market_buy" }, { "listingId", listingId } });
         }
 
         public async Task ChallengeRace(string opponentNetId, string raceType)
         {
-            await SendJson(new Dictionary<string, object>
-            {
-                { "type", "race_challenge" },
-                { "opponentNetId", opponentNetId },
-                { "raceType", raceType }
-            });
+            await SendJson(new Dictionary<string, object> { { "type", "race_challenge" }, { "opponentNetId", opponentNetId }, { "raceType", raceType } });
         }
 
         private async Task SendJson(Dictionary<string, object> data)
         {
             if (_ws == null || _ws.State != WebSocketState.Open) return;
-            string json = SimpleJsonSerialize(data);
-            byte[] bytes = Encoding.UTF8.GetBytes(json);
-            try
-            {
-                await _ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, _cts.Token);
-            }
-            catch (Exception e)
-            {
-                Debug.LogWarning("[NetworkBackend] Send failed: " + e.Message);
-            }
+            byte[] bytes = Encoding.UTF8.GetBytes(SimpleJsonSerialize(data));
+            try { await _ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, _cts.Token); }
+            catch (Exception e) { Debug.LogWarning("[NetworkBackend] Send failed: " + e.Message); }
         }
 
         private string SimpleJsonSerialize(Dictionary<string, object> dict)
         {
-            var sb = new StringBuilder();
-            sb.Append("{");
+            var sb = new StringBuilder("{");
             bool first = true;
             foreach (var kv in dict)
             {
-                if (!first) sb.Append(",");
-                first = false;
-                sb.Append("\"").Append(kv.Key).Append("\":");
-                sb.Append(SerializeValue(kv.Value));
+                if (!first) sb.Append(","); first = false;
+                sb.Append("\"").Append(kv.Key).Append("\":" ).Append(SerializeValue(kv.Value));
             }
-            sb.Append("}");
-            return sb.ToString();
+            return sb.Append("}").ToString();
         }
 
         private string SerializeValue(object val)
@@ -218,35 +156,10 @@ namespace CarParking.Multiplayer
             if (val == null) return "null";
             if (val is string s) return "\"" + s.Replace("\"", "\\\"") + "\"";
             if (val is bool b) return b ? "true" : "false";
-            if (val is int || val is long || val is float || val is double)
-                return Convert.ToString(val, System.Globalization.CultureInfo.InvariantCulture);
+            if (val is int || val is long || val is float || val is double) return Convert.ToString(val, System.Globalization.CultureInfo.InvariantCulture);
             if (val is Dictionary<string, object> d) return SimpleJsonSerialize(d);
-            if (val is Dictionary<string, double> dd)
-            {
-                var sb = new StringBuilder("{");
-                bool first = true;
-                foreach (var kv in dd)
-                {
-                    if (!first) sb.Append(",");
-                    first = false;
-                    sb.Append("\"").Append(kv.Key).Append("\":" ).Append(kv.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                }
-                sb.Append("}");
-                return sb.ToString();
-            }
-            if (val is Dictionary<string, float> df)
-            {
-                var sb = new StringBuilder("{");
-                bool first = true;
-                foreach (var kv in df)
-                {
-                    if (!first) sb.Append(",");
-                    first = false;
-                    sb.Append("\"").Append(kv.Key).Append("\":" ).Append(kv.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                }
-                sb.Append("}");
-                return sb.ToString();
-            }
+            if (val is Dictionary<string, double> dd) { var sb = new StringBuilder("{"); bool f = true; foreach (var kv in dd) { if (!f) sb.Append(","); f = false; sb.Append("\"").Append(kv.Key).Append("\":" ).Append(kv.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)); } return sb.Append("}").ToString(); }
+            if (val is Dictionary<string, float> df) { var sb = new StringBuilder("{"); bool f = true; foreach (var kv in df) { if (!f) sb.Append(","); f = false; sb.Append("\"").Append(kv.Key).Append("\":" ).Append(kv.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)); } return sb.Append("}").ToString(); }
             return "\"" + val.ToString() + "\"";
         }
 
@@ -257,8 +170,7 @@ namespace CarParking.Multiplayer
             if (idx < 0) return null;
             idx += pattern.Length;
             int end = json.IndexOf('"', idx);
-            if (end < 0) return null;
-            return json.Substring(idx, end - idx);
+            return end < 0 ? null : json.Substring(idx, end - idx);
         }
 
         private async void OnDestroy()
@@ -266,10 +178,7 @@ namespace CarParking.Multiplayer
             _connected = false;
             if (_cts != null) _cts.Cancel();
             if (_ws != null && _ws.State == WebSocketState.Open)
-            {
-                try { await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "bye", CancellationToken.None); }
-                catch { }
-            }
+                try { await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "bye", CancellationToken.None); } catch { }
         }
     }
 }
