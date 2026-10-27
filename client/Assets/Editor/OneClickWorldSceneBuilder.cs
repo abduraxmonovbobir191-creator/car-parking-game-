@@ -11,6 +11,7 @@ using CarParking.Core;
 using CarParking.UI;
 using CarParking.TrackEditor;
 using CarParking.VR;
+using CarParking.CameraSystem;
 
 namespace CarParking.EditorTools
 {
@@ -20,7 +21,7 @@ namespace CarParking.EditorTools
         public static void BuildCompleteScene()
         {
             if (!EditorUtility.DisplayDialog("Ultra Car Simulator",
-                "Build all systems (Modules 1-9) and playable vehicle?", "Build", "Cancel"))
+                "Build all systems (Modules 1-10 Part 1) and playable vehicle?", "Build", "Cancel"))
                 return;
 
             var worldRoot = CreateRoot("--- WORLD SYSTEMS ---");
@@ -35,9 +36,12 @@ namespace CarParking.EditorTools
             CreateSystem<WaterAndWeatherSystem>(worldRoot, "WaterAndWeatherSystem");
             CreateSystem<WeatherDisasterSystem>(worldRoot, "WeatherDisasterSystem");
             CreateSystem<AdvancedHydrodynamicsSystem>(worldRoot, "AdvancedHydrodynamicsSystem");
+            CreateSystem<VolumetricLightingAndNightAtmosphere>(worldRoot, "VolumetricLightingAndNightAtmosphere");
 
             CreateSystem<SmartTrafficSystem>(aiRoot, "SmartTrafficSystem");
             CreateSystem<SmartCityPedestriansAndTraffic>(aiRoot, "SmartCityPedestriansAndTraffic");
+            CreateSystem<RagdollAndImpactSystem>(aiRoot, "RagdollAndImpactSystem");
+            CreateSystem<DynamicCrowdReactionSystem>(aiRoot, "DynamicCrowdReactionSystem");
             CreateSystem<NetworkWorldSyncManager>(aiRoot, "NetworkWorldSyncManager");
             CreateSystem<NetworkBackendClient>(aiRoot, "NetworkBackendClient");
             CreateSystem<CarMarketAndTradeSystem>(aiRoot, "CarMarketAndTradeSystem");
@@ -57,6 +61,7 @@ namespace CarParking.EditorTools
             CreateSystem<InGameRadioSystem>(uiRoot, "InGameRadioSystem");
             CreateSystem<PhotoAndCinematicDirectorSystem>(uiRoot, "PhotoAndCinematicDirectorSystem");
             CreateSystem<VRHeadsetAndHandController>(uiRoot, "VRHeadsetAndHandController");
+            CreateSystem<CinematicCameraInertia>(uiRoot, "CinematicCameraInertia");
 
             GameObject vehicle = new GameObject("PlayableVehicle");
             vehicle.transform.SetParent(vehicleRoot.transform);
@@ -83,7 +88,9 @@ namespace CarParking.EditorTools
             vehicle.AddComponent<VehicleAudioSynthesizer>();
             vehicle.AddComponent<VehicleDamageAndDeformation>();
             vehicle.AddComponent<AdvancedMechanicalFailures>();
+            vehicle.AddComponent<ShatterableGlassAndDebrisSystem>();
             vehicle.AddComponent<OffRoadWinchAndRecoverySystem>();
+            vehicle.AddComponent<VehicleImpactForwarder>();
 
             controller.wheels = new RealisticVehicleController.Wheel[4];
             string[] names = { "Wheel_FL", "Wheel_FR", "Wheel_RL", "Wheel_RR" };
@@ -122,8 +129,8 @@ namespace CarParking.EditorTools
             }
 
             Selection.activeGameObject = vehicle;
-            EditorUtility.DisplayDialog("Ultra Car Simulator", "Modules 1-9 systems built successfully.", "OK");
-            Debug.Log("[OneClickBuilder] Modules 1-9 complete.");
+            EditorUtility.DisplayDialog("Ultra Car Simulator", "Modules 1-10 Part 1 built successfully.", "OK");
+            Debug.Log("[OneClickBuilder] Modules 1-10 Part 1 complete.");
         }
 
         private static GameObject CreateRoot(string name) => new GameObject(name);
