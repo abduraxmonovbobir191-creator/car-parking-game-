@@ -1,28 +1,24 @@
 # Ultra Car Simulator — Open World (Unity 6 HDRP)
 
-**Modules 1–12 complete.** GTA-scale + futuristic + economy ledger systems.
+**Modules 1–12 + 31, 32, 33, 36, 41.**
 
----
+Autonomous deep-engineering run in progress.
 
-## MODULE 12
+## Recent Modules
 
-| System | File |
-|--------|------|
-| Procedural Megacity | `World/ProceduralMegacityGenerator.cs` |
-| Live Weather / Satellite | `World/RealWorldWeatherAndSatelliteSync.cs` (Open-Meteo) |
-| Accident / Insurance AI | `Core/InsuranceAndAccidentDeepLearningSystem.cs` |
-| Car Token Ledger | `server/car_token_ledger.py` + `Multiplayer/CarTokenLedgerClient.cs` |
+| Module | Status | File |
+|--------|--------|------|
+| 31 | Done | `tools/generate_3d_vehicles.py` (real .obj meshes) |
+| 32 | Done | `tools/generate_3d_architecture.py` |
+| 33 | Done | `tools/generate_pbr_textures.py` |
+| 36 | Done | `Scripts/Mechanic/EngineBlockDisassemblySystem.cs` |
+| 41 | Done | `Scripts/Campaign/StoryCampaignEngine.cs` |
 
----
-
-## Quick Start
-
-```text
-Unity: Tools → Ultra Car Simulator → 1. Build Complete Playable World & Vehicle Scene
-Server: cd server && pip install -r requirements.txt && python multiplayer_server.py
-Ledger: python car_token_ledger.py
-Bots:   python neural_bot_racers.py
-App:    http://127.0.0.1:8080
+## Run generators
+```bash
+python tools/generate_3d_vehicles.py
+python tools/generate_3d_architecture.py
+python tools/generate_pbr_textures.py
 ```
 
 **Repo:** https://github.com/abduraxmonovbobir191-creator/car-parking-game-
