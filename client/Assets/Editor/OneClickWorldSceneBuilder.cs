@@ -21,7 +21,7 @@ namespace CarParking.EditorTools
         public static void BuildCompleteScene()
         {
             if (!EditorUtility.DisplayDialog("Ultra Car Simulator",
-                "Build ALL systems (Modules 1-10 complete) and playable vehicle?", "Build", "Cancel"))
+                "Build ALL systems (Modules 1-11) and playable vehicle?", "Build", "Cancel"))
                 return;
 
             var worldRoot = CreateRoot("--- WORLD SYSTEMS ---");
@@ -50,6 +50,7 @@ namespace CarParking.EditorTools
             CreateSystem<StreetRaceAndTelemetrySystem>(aiRoot, "StreetRaceAndTelemetrySystem");
             CreateSystem<PolicePursuitAndRadarSystem>(aiRoot, "PolicePursuitAndRadarSystem");
             CreateSystem<VoiceChatManager>(aiRoot, "VoiceChatManager");
+            CreateSystem<AIAutopilotSystem>(aiRoot, "AIAutopilotSystem");
 
             CreateSystem<WorldServicesAndEconomySystem>(uiRoot, "WorldServicesAndEconomySystem");
             CreateSystem<OBDScannerAndEconomySystem>(uiRoot, "OBDScannerAndEconomySystem");
@@ -66,6 +67,7 @@ namespace CarParking.EditorTools
             CreateSystem<VRHeadsetAndHandController>(uiRoot, "VRHeadsetAndHandController");
             CreateSystem<CinematicCameraInertia>(uiRoot, "CinematicCameraInertia");
             CreateSystem<AdaptivePerformanceProfiler>(uiRoot, "AdaptivePerformanceProfiler");
+            CreateSystem<CompanionAppBridge>(uiRoot, "CompanionAppBridge");
 
             GameObject vehicle = new GameObject("PlayableVehicle");
             vehicle.transform.SetParent(vehicleRoot.transform);
@@ -96,6 +98,8 @@ namespace CarParking.EditorTools
             vehicle.AddComponent<AdvancedDirtMaskController>();
             vehicle.AddComponent<OffRoadWinchAndRecoverySystem>();
             vehicle.AddComponent<VehicleImpactForwarder>();
+            vehicle.AddComponent<FlyingCarAndRocketBooster>();
+            vehicle.AddComponent<AIAutopilotSystem>();
 
             controller.wheels = new RealisticVehicleController.Wheel[4];
             string[] names = { "Wheel_FL", "Wheel_FR", "Wheel_RL", "Wheel_RR" };
@@ -134,9 +138,8 @@ namespace CarParking.EditorTools
             }
 
             Selection.activeGameObject = vehicle;
-            EditorUtility.DisplayDialog("Ultra Car Simulator",
-                "ALL Modules 1-10 complete. Playable world built.", "OK");
-            Debug.Log("[OneClickBuilder] Modules 1-10 FULL complete.");
+            EditorUtility.DisplayDialog("Ultra Car Simulator", "Modules 1-11 complete.", "OK");
+            Debug.Log("[OneClickBuilder] Modules 1-11 complete.");
         }
 
         private static GameObject CreateRoot(string name) => new GameObject(name);

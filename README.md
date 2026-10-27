@@ -1,39 +1,43 @@
 # Ultra Car Simulator — Open World (Unity 6 HDRP)
 
-GTA-scale open-world vehicle simulator. **Modules 1–10 complete.**
-
-**Engine:** Unity 6 + HDRP  
-**Repo:** car-parking-game-
+GTA-scale + futuristic systems. **Modules 1–11 complete.**
 
 ---
 
-## Full Module List
+## Modules 1–11
 
-| Module | Content |
-|--------|--------|
-| 1 | Floating Origin, Procedural Terrain, Biomes, Deformation |
-| 2 / 2.5 | Vehicle Physics, Drivetrain, Parking, Weather, Urban |
-| 3 | Character, Tuning, GPU Instancing, Save |
-| 4 | Network Sync, Avtobozor, Drag Race, Cockpit, Audio, Traffic |
-| 5 | Damage, Winch, Economy, 8K HUD, One-Click Builder |
-| 6 | Python Backend, Mobile/Gyro, Police, Dealership/Trailer |
-| 7 | Voice Chat, Disasters, Trucking, Drone + Replay |
-| 8 | Track Editor, VR, Radio, Photo Mode |
-| 9 | Mechanical Failures, Pedestrians, Hydrodynamics, OBD/Bank/Insurance |
-| **10.1** | Ragdoll, Camera Inertia, Crowd Reactions, Volumetric Lights, Shatter Glass |
-| **10.2** | Audio Occlusion, Dirt Mask, Diverse NPCs, Easter Eggs, Adaptive 120FPS |
+| # | Content |
+|---|--------|
+| 1–10 | World, Vehicle, Multiplayer, Police, Economy, VR, Disasters, Ragdoll, Dirt, 120FPS... |
+| **11** | **Tesla FSD Autopilot, Flying Car / Rocket Booster, Companion Web Dashboard, Python Neural Bot Racers** |
+
+---
+
+## MODULE 11
+
+| File | Role |
+|------|------|
+| `AI/AIAutopilotSystem.cs` | FSD toggle (F12), waypoints, obstacles |
+| `Vehicle/FlyingCarAndRocketBooster.cs` | Alt+B fly mode, boost |
+| `UI/CompanionAppBridge.cs` | http://127.0.0.1:8080 telemetry dashboard |
+| `server/neural_bot_racers.py` | AI racers vs players |
 
 ---
 
 ## Run
 
-**Unity:** `Tools → Ultra Car Simulator → 1. Build Complete Playable World & Vehicle Scene`
+**Unity:** Tools → Ultra Car Simulator → 1. Build Complete Playable World & Vehicle Scene
 
-**Server:**
+**Multiplayer server:**
 ```bash
-cd server
-pip install -r requirements.txt
-python multiplayer_server.py
+cd server && pip install -r requirements.txt && python multiplayer_server.py
 ```
 
-**Status:** Full production-ready framework on GitHub. Ready for art, netcode transport binding, and device testing.
+**Neural bots (optional):**
+```bash
+python neural_bot_racers.py
+```
+
+**Companion dashboard:** open `http://127.0.0.1:8080` while game is running.
+
+**Status:** Modules 1–11 on GitHub.
