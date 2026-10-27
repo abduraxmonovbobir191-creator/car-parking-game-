@@ -1,40 +1,48 @@
 # Ultra Car Simulator — Open World Driving & Parking (Unity 6 HDRP)
 
-AAA-style open-world vehicle simulator with continental-scale procedural terrain, soft-body damage, deformable mud/sand, full drivetrain, multiplayer backend + voice chat, police pursuit, mobile 120FPS controls, dealership/livery/trailer, trucking business, extreme weather disasters, and cinematic drone/replay.
+Full open-world vehicle simulator: procedural continents, soft-body damage, multiplayer + voice, police, trucking, disasters, VR, track editor, photo mode, and more.
 
 **Engine:** Unity 6 + HDRP  
-**Target:** 4K/8K + Mobile 120FPS
+**Modules:** 1–8 complete
 
 ---
 
-## Modules 1–7 Complete
+## Module Summary
 
-| Module | Systems |
-|--------|--------|
-| 1 | Floating Origin, Procedural Terrain, Biomes, Deformation Compute |
-| 2 / 2.5 | Vehicle Physics, Drivetrain, Parking, Environment Bridge, Urban, Water/Weather |
-| 3 | Character, Doors, Tuning, GPU Instancing, Save |
-| 4 | Network Sync, Avtobozor, Drag Race, Cockpit, Audio, AI Traffic |
-| 5 | Damage, Winch, Economy/Missions, 8K HUD, One-Click Builder |
-| 6 | Python Backend, NetworkBackendClient, Mobile Touch/Gyro, Police, Dealership/Trailer |
-| 7 | Voice Chat Walkie-Talkie, Tornado/Flood/Earthquake, Trucking Logistics, Cinematic Drone + Replay |
+| # | Content |
+|---|--------|
+| 1 | Floating Origin, Procedural Terrain, Biomes, Deformation |
+| 2/2.5 | Vehicle Physics, Drivetrain, Parking, Weather, Urban |
+| 3 | Character, Tuning, GPU Instancing, Save |
+| 4 | Network Sync, Avtobozor, Drag Race, Cockpit, Audio, Traffic |
+| 5 | Damage, Winch, Economy, 8K HUD, One-Click Builder |
+| 6 | Python Backend, Mobile/Gyro, Police, Dealership/Trailer |
+| 7 | Voice Chat, Tornado/Flood/Quake, Trucking, Drone + Replay |
+| 8 | Track Editor, VR Hands, In-Game Radio, Photo Mode / Cinematic Director |
 
 ---
 
-## Controls (extra)
+## Extra Controls (Module 7–8)
 
 | Action | Key |
 |--------|-----|
-| Push-to-Talk Voice | V |
-| Drone FPV Toggle | F7 |
-| Replay Last 30s | F8 |
-| Winch / Diff-Lock / etc. | See full list in previous README sections |
+| Push-to-Talk | V |
+| Drone FPV | F7 |
+| Replay | F8 |
+| Track Editor Toggle | F6 |
+| Place (Editor) | LMB |
+| Save Track | F10 |
+| Photo Mode | P |
+| Record Keyframe | K |
+| Play Camera Path | L |
+| Radio Next Station | Shift+R |
+| Toggle Windows (Radio) | Shift+T |
 
 ---
 
 ## Run
 
-**Unity:** Tools → Ultra Car Simulator → 1. Build Complete Playable World & Vehicle Scene → Play
+**Unity:** `Tools → Ultra Car Simulator → 1. Build Complete Playable World & Vehicle Scene`
 
 **Server:**
 ```bash
@@ -45,7 +53,4 @@ python multiplayer_server.py
 
 ---
 
-## Status
-
-**Modules 1–7 production-ready and pushed.**  
-Ready for Unity testing, art, mobile builds, and live multiplayer + voice sessions.
+**Status:** Modules 1–8 production-ready and on GitHub.

@@ -9,21 +9,18 @@ using CarParking.AI;
 using CarParking.Audio;
 using CarParking.Core;
 using CarParking.UI;
+using CarParking.TrackEditor;
+using CarParking.VR;
 
 namespace CarParking.EditorTools
 {
-    /// <summary>
-    /// One-click scene builder that wires up every system from Modules 1-6.
-    /// Menu: Tools/Ultra Car Simulator/1. Build Complete Playable World & Vehicle Scene
-    /// </summary>
     public static class OneClickWorldSceneBuilder
     {
         [MenuItem("Tools/Ultra Car Simulator/1. Build Complete Playable World & Vehicle Scene")]
         public static void BuildCompleteScene()
         {
             if (!EditorUtility.DisplayDialog("Ultra Car Simulator",
-                "This will create and wire up all core systems (Modules 1-6) and a playable vehicle in the current scene.\nContinue?",
-                "Build", "Cancel"))
+                "Build all systems (Modules 1-8) and playable vehicle?", "Build", "Cancel"))
                 return;
 
             var worldRoot = CreateRoot("--- WORLD SYSTEMS ---");
@@ -37,23 +34,31 @@ namespace CarParking.EditorTools
             CreateSystem<TerrainDeformationManager>(worldRoot, "TerrainDeformationManager");
             CreateSystem<UrbanAndBridgeGenerator>(worldRoot, "UrbanAndBridgeGenerator");
             CreateSystem<WaterAndWeatherSystem>(worldRoot, "WaterAndWeatherSystem");
+            CreateSystem<WeatherDisasterSystem>(worldRoot, "WeatherDisasterSystem");
 
-            // MODULE 4 + 6 AI / Multiplayer
+            // MODULE 4/6/7 AI + Multiplayer
             CreateSystem<SmartTrafficSystem>(aiRoot, "SmartTrafficSystem");
             CreateSystem<NetworkWorldSyncManager>(aiRoot, "NetworkWorldSyncManager");
             CreateSystem<NetworkBackendClient>(aiRoot, "NetworkBackendClient");
             CreateSystem<CarMarketAndTradeSystem>(aiRoot, "CarMarketAndTradeSystem");
             CreateSystem<StreetRaceAndTelemetrySystem>(aiRoot, "StreetRaceAndTelemetrySystem");
             CreateSystem<PolicePursuitAndRadarSystem>(aiRoot, "PolicePursuitAndRadarSystem");
+            CreateSystem<VoiceChatManager>(aiRoot, "VoiceChatManager");
 
-            // MODULE 5 + 6 Services & UI
+            // MODULE 5/6/7/8 Services & UI
             CreateSystem<WorldServicesAndEconomySystem>(uiRoot, "WorldServicesAndEconomySystem");
             CreateSystem<Graphics8KAndHUDController>(uiRoot, "Graphics8KAndHUDController");
             CreateSystem<GarageAndWorldSaveManager>(uiRoot, "GarageAndWorldSaveManager");
             CreateSystem<MobileTouchAndGyroController>(uiRoot, "MobileTouchAndGyroController");
             CreateSystem<DealershipLiveryAndTrailerSystem>(uiRoot, "DealershipLiveryAndTrailerSystem");
+            CreateSystem<TruckingLogisticsBusinessSystem>(uiRoot, "TruckingLogisticsBusinessSystem");
+            CreateSystem<CinematicDroneAndReplaySystem>(uiRoot, "CinematicDroneAndReplaySystem");
+            CreateSystem<InGameTrackEditor>(uiRoot, "InGameTrackEditor");
+            CreateSystem<InGameRadioSystem>(uiRoot, "InGameRadioSystem");
+            CreateSystem<PhotoAndCinematicDirectorSystem>(uiRoot, "PhotoAndCinematicDirectorSystem");
+            CreateSystem<VRHeadsetAndHandController>(uiRoot, "VRHeadsetAndHandController");
 
-            // Playable Vehicle Hierarchy
+            // Vehicle
             GameObject vehicle = new GameObject("PlayableVehicle");
             vehicle.transform.SetParent(vehicleRoot.transform);
             vehicle.transform.position = new Vector3(0f, 1.2f, 0f);
@@ -79,31 +84,27 @@ namespace CarParking.EditorTools
             vehicle.AddComponent<VehicleAudioSynthesizer>();
             vehicle.AddComponent<VehicleDamageAndDeformation>();
             vehicle.AddComponent<OffRoadWinchAndRecoverySystem>();
-            vehicle.AddComponent<DealershipLiveryAndTrailerSystem>();
 
             controller.wheels = new RealisticVehicleController.Wheel[4];
-            string[] wheelNames = { "Wheel_FL", "Wheel_FR", "Wheel_RL", "Wheel_RR" };
-            Vector3[] wheelPositions = {
+            string[] names = { "Wheel_FL", "Wheel_FR", "Wheel_RL", "Wheel_RR" };
+            Vector3[] positions = {
                 new Vector3(-0.85f, 0.35f, 1.45f),
                 new Vector3(0.85f, 0.35f, 1.45f),
                 new Vector3(-0.85f, 0.35f, -1.35f),
                 new Vector3(0.85f, 0.35f, -1.35f)
             };
-
             for (int i = 0; i < 4; i++)
             {
-                GameObject wheel = new GameObject(wheelNames[i]);
-                wheel.transform.SetParent(vehicle.transform);
-                wheel.transform.localPosition = wheelPositions[i];
-
+                var wgo = new GameObject(names[i]);
+                wgo.transform.SetParent(vehicle.transform);
+                wgo.transform.localPosition = positions[i];
                 var w = new RealisticVehicleController.Wheel();
-                w.wheelTransform = wheel.transform;
+                w.wheelTransform = wgo.transform;
                 w.radius = 0.35f;
                 w.isDriveWheel = true;
                 w.isSteerWheel = i < 2;
                 controller.wheels[i] = w;
             }
-
             controller.drivetrain = drivetrain;
 
             GameObject character = new GameObject("DriverCharacter");
@@ -118,31 +119,21 @@ namespace CarParking.EditorTools
             if (terrainStreamer != null)
             {
                 var so = new SerializedObject(terrainStreamer);
-                var viewerProp = so.FindProperty("viewer");
-                if (viewerProp != null)
-                {
-                    viewerProp.objectReferenceValue = vehicle.transform;
-                    so.ApplyModifiedProperties();
-                }
+                var vp = so.FindProperty("viewer");
+                if (vp != null) { vp.objectReferenceValue = vehicle.transform; so.ApplyModifiedProperties(); }
             }
 
             Selection.activeGameObject = vehicle;
             EditorUtility.DisplayDialog("Ultra Car Simulator",
-                "Complete playable world and vehicle hierarchy has been built successfully!\n\n" +
-                "All systems from Modules 1-6 are present in the scene.",
-                "OK");
-
-            Debug.Log("[OneClickBuilder] Scene build complete (Modules 1-6).");
+                "Modules 1-8 systems and playable vehicle built successfully.", "OK");
+            Debug.Log("[OneClickBuilder] Modules 1-8 complete.");
         }
 
-        private static GameObject CreateRoot(string name)
-        {
-            return new GameObject(name);
-        }
+        private static GameObject CreateRoot(string name) => new GameObject(name);
 
         private static T CreateSystem<T>(GameObject parent, string name) where T : Component
         {
-            GameObject go = new GameObject(name);
+            var go = new GameObject(name);
             go.transform.SetParent(parent.transform);
             return go.AddComponent<T>();
         }
