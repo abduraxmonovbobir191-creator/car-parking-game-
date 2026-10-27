@@ -1,0 +1,59 @@
+#pragma kernel ClearDeformation
+#pragma kernel StampWheelTrack
+#pragma kernel ShiftOriginDeformation
+#pragma kernel RecoverDeformation
+
+RWTexture2D<float> Result;
+
+float2 WheelUV;
+float Strength;
+float Radius;
+float DeltaTime;
+float Recovery;
+float2 ShiftUVOffset;
+
+[numthreads(8,8,1)]
+void ClearDeformation(uint3 id : SV_DispatchThreadID)
+{
+    Result[id.xy] = 0;
+}
+
+[numthreads(8,8,1)]
+void StampWheelTrack(uint3 id : SV_DispatchThreadID)
+{
+    float2 uv = (float2)id.xy / float2(512.0, 512.0);
+    float dist = distance(uv, WheelUV);
+    
+    if (dist < Radius)
+    {
+        float falloff = 1.0 - saturate(dist / Radius);
+        falloff = falloff * falloff;
+        float stamp = Strength * falloff;
+        float current = Result[id.xy];
+        Result[id.xy] = max(current, stamp);
+    }
+}
+
+[numthreads(8,8,1)]
+void ShiftOriginDeformation(uint3 id : SV_DispatchThreadID)
+{
+    float2 uv = (float2)id.xy / float2(512.0, 512.0);
+    float2 srcUV = uv - ShiftUVOffset;
+    
+    if (srcUV.x >= 0.0 && srcUV.x <= 1.0 && srcUV.y >= 0.0 && srcUV.y <= 1.0)
+    {
+        uint2 srcPixel = uint2(srcUV * 512.0);
+        Result[id.xy] = Result[srcPixel];
+    }
+    else
+    {
+        Result[id.xy] = 0;
+    }
+}
+
+[numthreads(8,8,1)]
+void RecoverDeformation(uint3 id : SV_DispatchThreadID)
+{
+    float current = Result[id.xy];
+    Result[id.xy] = max(0.0, current - Recovery);
+}
