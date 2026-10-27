@@ -21,7 +21,7 @@ namespace CarParking.EditorTools
         public static void BuildCompleteScene()
         {
             if (!EditorUtility.DisplayDialog("Ultra Car Simulator",
-                "Build ALL systems (Modules 1-11) and playable vehicle?", "Build", "Cancel"))
+                "Build ALL systems (Modules 1-12) and playable vehicle?", "Build", "Cancel"))
                 return;
 
             var worldRoot = CreateRoot("--- WORLD SYSTEMS ---");
@@ -33,8 +33,10 @@ namespace CarParking.EditorTools
             var terrainStreamer = CreateSystem<ProceduralTerrainChunkStreamer>(worldRoot, "ProceduralTerrainChunkStreamer");
             CreateSystem<TerrainDeformationManager>(worldRoot, "TerrainDeformationManager");
             CreateSystem<UrbanAndBridgeGenerator>(worldRoot, "UrbanAndBridgeGenerator");
+            CreateSystem<ProceduralMegacityGenerator>(worldRoot, "ProceduralMegacityGenerator");
             CreateSystem<WaterAndWeatherSystem>(worldRoot, "WaterAndWeatherSystem");
             CreateSystem<WeatherDisasterSystem>(worldRoot, "WeatherDisasterSystem");
+            CreateSystem<RealWorldWeatherAndSatelliteSync>(worldRoot, "RealWorldWeatherAndSatelliteSync");
             CreateSystem<AdvancedHydrodynamicsSystem>(worldRoot, "AdvancedHydrodynamicsSystem");
             CreateSystem<VolumetricLightingAndNightAtmosphere>(worldRoot, "VolumetricLightingAndNightAtmosphere");
             CreateSystem<WorldExplorationEasterEggs>(worldRoot, "WorldExplorationEasterEggs");
@@ -47,6 +49,7 @@ namespace CarParking.EditorTools
             CreateSystem<NetworkWorldSyncManager>(aiRoot, "NetworkWorldSyncManager");
             CreateSystem<NetworkBackendClient>(aiRoot, "NetworkBackendClient");
             CreateSystem<CarMarketAndTradeSystem>(aiRoot, "CarMarketAndTradeSystem");
+            CreateSystem<CarTokenLedgerClient>(aiRoot, "CarTokenLedgerClient");
             CreateSystem<StreetRaceAndTelemetrySystem>(aiRoot, "StreetRaceAndTelemetrySystem");
             CreateSystem<PolicePursuitAndRadarSystem>(aiRoot, "PolicePursuitAndRadarSystem");
             CreateSystem<VoiceChatManager>(aiRoot, "VoiceChatManager");
@@ -54,6 +57,7 @@ namespace CarParking.EditorTools
 
             CreateSystem<WorldServicesAndEconomySystem>(uiRoot, "WorldServicesAndEconomySystem");
             CreateSystem<OBDScannerAndEconomySystem>(uiRoot, "OBDScannerAndEconomySystem");
+            CreateSystem<InsuranceAndAccidentDeepLearningSystem>(uiRoot, "InsuranceAndAccidentDeepLearningSystem");
             CreateSystem<Graphics8KAndHUDController>(uiRoot, "Graphics8KAndHUDController");
             CreateSystem<GarageAndWorldSaveManager>(uiRoot, "GarageAndWorldSaveManager");
             CreateSystem<MobileTouchAndGyroController>(uiRoot, "MobileTouchAndGyroController");
@@ -98,6 +102,7 @@ namespace CarParking.EditorTools
             vehicle.AddComponent<AdvancedDirtMaskController>();
             vehicle.AddComponent<OffRoadWinchAndRecoverySystem>();
             vehicle.AddComponent<VehicleImpactForwarder>();
+            vehicle.AddComponent<AccidentReportForwarder>();
             vehicle.AddComponent<FlyingCarAndRocketBooster>();
             vehicle.AddComponent<AIAutopilotSystem>();
 
@@ -138,8 +143,8 @@ namespace CarParking.EditorTools
             }
 
             Selection.activeGameObject = vehicle;
-            EditorUtility.DisplayDialog("Ultra Car Simulator", "Modules 1-11 complete.", "OK");
-            Debug.Log("[OneClickBuilder] Modules 1-11 complete.");
+            EditorUtility.DisplayDialog("Ultra Car Simulator", "Modules 1-12 complete.", "OK");
+            Debug.Log("[OneClickBuilder] Modules 1-12 complete.");
         }
 
         private static GameObject CreateRoot(string name) => new GameObject(name);

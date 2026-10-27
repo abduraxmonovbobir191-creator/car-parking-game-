@@ -1,43 +1,28 @@
 # Ultra Car Simulator — Open World (Unity 6 HDRP)
 
-GTA-scale + futuristic systems. **Modules 1–11 complete.**
+**Modules 1–12 complete.** GTA-scale + futuristic + economy ledger systems.
 
 ---
 
-## Modules 1–11
+## MODULE 12
 
-| # | Content |
-|---|--------|
-| 1–10 | World, Vehicle, Multiplayer, Police, Economy, VR, Disasters, Ragdoll, Dirt, 120FPS... |
-| **11** | **Tesla FSD Autopilot, Flying Car / Rocket Booster, Companion Web Dashboard, Python Neural Bot Racers** |
-
----
-
-## MODULE 11
-
-| File | Role |
-|------|------|
-| `AI/AIAutopilotSystem.cs` | FSD toggle (F12), waypoints, obstacles |
-| `Vehicle/FlyingCarAndRocketBooster.cs` | Alt+B fly mode, boost |
-| `UI/CompanionAppBridge.cs` | http://127.0.0.1:8080 telemetry dashboard |
-| `server/neural_bot_racers.py` | AI racers vs players |
+| System | File |
+|--------|------|
+| Procedural Megacity | `World/ProceduralMegacityGenerator.cs` |
+| Live Weather / Satellite | `World/RealWorldWeatherAndSatelliteSync.cs` (Open-Meteo) |
+| Accident / Insurance AI | `Core/InsuranceAndAccidentDeepLearningSystem.cs` |
+| Car Token Ledger | `server/car_token_ledger.py` + `Multiplayer/CarTokenLedgerClient.cs` |
 
 ---
 
-## Run
+## Quick Start
 
-**Unity:** Tools → Ultra Car Simulator → 1. Build Complete Playable World & Vehicle Scene
-
-**Multiplayer server:**
-```bash
-cd server && pip install -r requirements.txt && python multiplayer_server.py
+```text
+Unity: Tools → Ultra Car Simulator → 1. Build Complete Playable World & Vehicle Scene
+Server: cd server && pip install -r requirements.txt && python multiplayer_server.py
+Ledger: python car_token_ledger.py
+Bots:   python neural_bot_racers.py
+App:    http://127.0.0.1:8080
 ```
 
-**Neural bots (optional):**
-```bash
-python neural_bot_racers.py
-```
-
-**Companion dashboard:** open `http://127.0.0.1:8080` while game is running.
-
-**Status:** Modules 1–11 on GitHub.
+**Repo:** https://github.com/abduraxmonovbobir191-creator/car-parking-game-
