@@ -7,6 +7,7 @@ namespace CarParking.Mechanic
     /// <summary>
     /// MODULE 36 — Bolt-by-Bolt Engine Block Disassembly System
     /// Car Mechanic Simulator style interactive inspection and part tracking.
+    /// Expanded with torque, oil change, repair cost, and reset utilities.
     /// </summary>
     public class EngineBlockDisassemblySystem : MonoBehaviour
     {
@@ -141,6 +142,57 @@ namespace CarParking.Mechanic
                     sb.AppendLine($"! {p.displayName}: wear {p.wearPercent*100f:F0}% temp {p.temperatureC:F0}C oilDmg {p.oilStarvationDamage*100f:F0}%");
             }
             return sb.ToString();
+        }
+
+        public void TorqueBolt(string partId, float appliedNm)
+        {
+            var p = GetPart(partId);
+            if (p == null || p.isRemoved) return;
+            float diff = Mathf.Abs(appliedNm - p.boltTorqueNm);
+            if (diff > p.boltTorqueNm * 0.25f)
+            {
+                p.wearPercent = Mathf.Clamp01(p.wearPercent + 0.02f);
+                Debug.Log($"[Mechanic] Over/under torqued {p.displayName}");
+            }
+        }
+
+        public void ApplyOilChange()
+        {
+            globalOilLevel = 1f;
+            foreach (var p in parts)
+                p.oilStarvationDamage = Mathf.Max(0f, p.oilStarvationDamage - 0.3f);
+            Debug.Log("[Mechanic] Oil changed");
+        }
+
+        public void CoolDown(float amount)
+        {
+            foreach (var p in parts)
+                p.temperatureC = Mathf.Max(20f, p.temperatureC - amount);
+        }
+
+        public List<EnginePart> GetDamagedParts()
+        {
+            var list = new List<EnginePart>();
+            foreach (var p in parts)
+                if (p.isDamaged || p.wearPercent > 0.4f) list.Add(p);
+            return list;
+        }
+
+        public float EstimateRepairCost()
+        {
+            float cost = 0f;
+            foreach (var p in GetDamagedParts())
+                cost += 150f + p.wearPercent * 800f;
+            return cost;
+        }
+
+        public void ResetEngine()
+        {
+            parts.Clear();
+            BuildDefaultParts();
+            globalOilLevel = 1f;
+            globalCoolantLevel = 1f;
+            Debug.Log("[Mechanic] Engine reset to factory");
         }
     }
 }
